@@ -1,5 +1,5 @@
 
-# Step: Configure Local Nginx Reverse Proxy for WordPress Docker Setup
+# Local Docker Setup
 
 The string `<yourlocalurl>` and `<yourlocaldomain>` are placeholder for your real local url and domain (with and without protocol).
 
