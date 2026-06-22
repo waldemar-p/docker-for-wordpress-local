@@ -2,7 +2,7 @@
 set -e
 
 # Rewrite the site domain inside the LIVE database.
-# Usage: ./update-db-domains.sh <old-domain> [new-domain]
+# Usage: ./scripts/update-db-domains.sh <old-domain> [new-domain]   (run from the project root)
 #   new-domain defaults to the first entry of LOCAL_URLS in .env.
 #
 # Primary path uses wp-cli (serialized-data safe). If wp-cli can't run
@@ -22,7 +22,7 @@ OLD="$1"
 NEW="${2:-$(set -- ${LOCAL_URLS}; echo "$1")}"
 
 if [ -z "$OLD" ] || [ -z "$NEW" ]; then
-  echo "❌ Usage: ./update-db-domains.sh <old-domain> [new-domain]"
+  echo "❌ Usage: ./scripts/update-db-domains.sh <old-domain> [new-domain]"
   echo "   (new-domain defaults to the first entry of LOCAL_URLS in .env)"
   exit 1
 fi

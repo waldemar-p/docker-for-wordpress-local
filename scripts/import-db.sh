@@ -2,7 +2,7 @@
 set -e
 
 # Import a SQL dump into the running `db` container.
-# Usage: ./import-db.sh [file.sql]   (defaults to db.sql in this directory)
+# Usage: ./scripts/import-db.sh [file.sql]   (run from the project root; defaults to db.sql there)
 
 FILE="${1:-db.sql}"
 

@@ -22,10 +22,14 @@ Container names are templated as `${PROJECT_NAME}_wp`, `_nginx`, `_db`.
 ## First-time setup
 
 ```bash
-cp .env.example .env          # then edit credentials + set LOCAL_URLS
-docker compose up -d          # WordPress core auto-populates ./wordpress on first boot
-./fill-wp-config-creds.sh     # inject .env credentials into wordpress/wp-config.php
+cp .env.example .env             # then edit credentials + set LOCAL_URLS
+docker compose up -d             # WordPress core auto-populates ./wordpress on first boot
+./scripts/fill-wp-config-creds.sh  # inject .env credentials into wordpress/wp-config.php
 ```
+
+All helper scripts live in **`scripts/`** and must be **run from the project root** (e.g.
+`./scripts/import-db.sh`) — they reference `.env`, `wordpress/`, `db.sql` and `docker compose`
+relative to the current directory, not to the script's location.
 
 `.env` also defines **`LOCAL_URLS`** — space-separated local domain(s) used as the default by
 `setup-local-domain.sh` and `update-db-domains.sh` when no CLI args are passed.
@@ -41,16 +45,16 @@ docker compose logs -f nginx  # tail a service
 docker compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} ${MYSQL_DATABASE}   # DB shell
 ```
 
-Helper scripts (all root-level, same style — emoji status output) source shared helpers from `lib.sh`:
+Helper scripts (all in `scripts/`, same style — emoji status output) source shared helpers from `scripts/lib.sh`:
 
 ```bash
-./import-db.sh [file.sql]              # import a dump (default: ./db.sql) into the db container
-./setup-local-domain.sh [url...]       # /etc/hosts + host-Nginx reverse proxy + reload (default: LOCAL_URLS); uses sudo
-./update-db-domains.sh <old> [new]     # rewrite domain in live DB via wp-cli, raw-SQL fallback (new default: first LOCAL_URLS)
-./scan-wp-files.sh [dir]               # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
+./scripts/import-db.sh [file.sql]            # import a dump (default: ./db.sql) into the db container
+./scripts/setup-local-domain.sh [url...]     # /etc/hosts + host-Nginx reverse proxy + reload (default: LOCAL_URLS); uses sudo
+./scripts/update-db-domains.sh <old> [new]   # rewrite domain in live DB via wp-cli, raw-SQL fallback (new default: first LOCAL_URLS)
+./scripts/scan-wp-files.sh [dir]             # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
 ```
 
-`lib.sh` is **sourced, not executed** (no shebang). Each script begins with
+`scripts/lib.sh` is **sourced, not executed** (no shebang). Each script begins with
 `source "$(dirname "$0")/lib.sh"` and then calls its helpers instead of inlining the logic:
 
 - `load_env [hard|soft]` — parse `.env` and `export` its vars (skips blanks/comments, strips one
@@ -64,7 +68,10 @@ Helper scripts (all root-level, same style — emoji status output) source share
 filesystem scan (whitelist of standard WP root entries flags unknown top-level files, plus
 suspicious-pattern rules — PHP inside `wp-content/uploads/`, archives/`.sql` dumps, editor/VCS
 junk); Layer 2 runs `docker compose run --rm wpcli wp core verify-checksums` when the `wordpress`
-container is up, and is silently skipped otherwise.
+container is up, and is silently skipped otherwise. A lone `wp-config-sample.php` checksum
+mismatch (and the resulting "doesn't verify against checksums" error) is **expected** — the
+official WordPress Docker image ships a slightly modified sample file; the script prints a note
+saying so. Only mismatches under `wp-admin/`/`wp-includes/` or unexpected extra files matter.
 
 `update-db-domains.sh` prefers wp-cli (`docker compose run --rm wpcli wp search-replace ...`) because it
 rewrites serialized data correctly; it falls back to raw SQL `REPLACE` across `${prefix}options/posts/postmeta`

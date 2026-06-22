@@ -3,7 +3,7 @@ set -e
 
 # Scan the WordPress folder and REPORT files/folders that are probably not part of
 # a standard WordPress install (cruft, leftover dumps, editor junk, injected PHP).
-# Usage: ./scan-wp-files.sh [dir]   (dir defaults to ./wordpress)
+# Usage: ./scripts/scan-wp-files.sh [dir]   (run from the project root; dir defaults to ./wordpress)
 #
 # Report only — nothing is ever deleted or moved.
 # Layer 1 (always): filesystem heuristics — unknown root entries + suspicious patterns.
@@ -114,6 +114,10 @@ else
   set +e
   docker compose run --rm wpcli wp core verify-checksums
   set -e
+  echo "   ℹ️  A lone 'wp-config-sample.php' mismatch (and the resulting \"doesn't verify\""
+  echo "      against checksums\" error) is expected — the official WordPress Docker image"
+  echo "      ships a slightly modified sample file. Mismatches under wp-admin/ or"
+  echo "      wp-includes/, or unexpected extra files, are the ones worth investigating."
 fi
 
 # --- Summary -------------------------------------------------------------------

@@ -6,7 +6,7 @@ set -e
 #   2. register the domain(s) in /etc/hosts
 #   3. install the config into system Nginx and reload it
 #
-# Usage: ./setup-local-domain.sh [url ...]
+# Usage: ./scripts/setup-local-domain.sh [url ...]   (run from the project root)
 #   URLs default to LOCAL_URLS from .env when no arguments are given.
 
 # shellcheck source=lib.sh
@@ -25,7 +25,7 @@ fi
 
 if [ "${#URLS[@]}" -eq 0 ]; then
   echo "❌ No URL given and LOCAL_URLS is empty in .env."
-  echo "   Usage: ./setup-local-domain.sh <url> [more-urls...]"
+  echo "   Usage: ./scripts/setup-local-domain.sh <url> [more-urls...]"
   exit 1
 fi
 

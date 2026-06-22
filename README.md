@@ -4,17 +4,19 @@
 ## ⚡ TL;DR — quick start
 
 ```bash
-cp .env.example .env          # then edit credentials, PROJECT_NAME, LOCAL_URLS
-docker compose up -d          # boot; WordPress core auto-populates ./wordpress
-./fill-wp-config-creds.sh     # write .env creds into wordpress/wp-config.php
+cp .env.example .env                 # then edit credentials, PROJECT_NAME, LOCAL_URLS
+docker compose up -d                 # boot; WordPress core auto-populates ./wordpress
+./scripts/fill-wp-config-creds.sh    # write .env creds into wordpress/wp-config.php
 
 # Optional — restore an existing site from a dump:
-./import-db.sh db.sql              # import ./db.sql (set WORDPRESS_TABLE_PREFIX to match it first!)
-./update-db-domains.sh old.com     # rewrite domain → first LOCAL_URLS entry
+./scripts/import-db.sh db.sql            # import ./db.sql (set WORDPRESS_TABLE_PREFIX to match it first!)
+./scripts/update-db-domains.sh old.com   # rewrite domain → first LOCAL_URLS entry
 
 # Optional — reach it via a clean domain instead of localhost:8080:
-./setup-local-domain.sh            # /etc/hosts + host-Nginx proxy for LOCAL_URLS (uses sudo)
+./scripts/setup-local-domain.sh          # /etc/hosts + host-Nginx proxy for LOCAL_URLS (uses sudo)
 ```
+
+> All helper scripts live in `scripts/` — run them **from the project root** (as shown above).
 
 Site is now at `http://localhost:8080` (or `http://<LOCAL_URLS>` after the last step).
 
@@ -26,7 +28,7 @@ To access your WordPress Docker container through a clean domain (like `http://<
 
 First execute `cp .env.example .env` and fill out the credentials. Set `LOCAL_URLS` to your local
 domain(s) — space-separated if you want more than one (e.g. `LOCAL_URLS="mysite.local www.mysite.local"`).
-Afterwards run the `fill-wp-config-creds.sh` to magically fill the credentials into your `wp-config.php`.
+Afterwards run `./scripts/fill-wp-config-creds.sh` to magically fill the credentials into your `wp-config.php`.
 
 > ⚠️ **`WORDPRESS_TABLE_PREFIX`**: leave this at the default `wp_`. Only change it if you are
 > importing an existing WordPress database whose tables use a different prefix — and then it must
@@ -37,13 +39,20 @@ Afterwards run the `fill-wp-config-creds.sh` to magically fill the credentials i
 
 ## 🛠 Helper scripts
 
+All scripts live in `scripts/` and are run **from the project root**.
+
 | Script | Purpose |
 | --- | --- |
-| `fill-wp-config-creds.sh` | Inject `.env` DB credentials and table prefix into `wordpress/wp-config.php`. |
-| `import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). |
-| `setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s), then test & reload Nginx. Defaults to `LOCAL_URLS`. |
-| `update-db-domains.sh <old> [new]` | Rewrite the site domain inside the live DB (wp-cli, with raw-SQL fallback). `new` defaults to the first `LOCAL_URLS` entry. |
-| `scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
+| `./scripts/fill-wp-config-creds.sh` | Inject `.env` DB credentials and table prefix into `wordpress/wp-config.php`. |
+| `./scripts/import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). |
+| `./scripts/setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s), then test & reload Nginx. Defaults to `LOCAL_URLS`. |
+| `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain inside the live DB (wp-cli, with raw-SQL fallback). `new` defaults to the first `LOCAL_URLS` entry. |
+| `./scripts/scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
+
+> ℹ️ `scan-wp-files.sh` may report `wp-config-sample.php` failing checksum verification (with a
+> *"doesn't verify against checksums"* error). This is **expected** — the official WordPress Docker
+> image ships a slightly modified sample file. Only mismatches under `wp-admin/`/`wp-includes/` or
+> unexpected extra files are worth investigating.
 
 Steps 1–4 below describe what these scripts automate.
 
@@ -51,8 +60,8 @@ Steps 1–4 below describe what these scripts automate.
 
 ## 🧩 1. Add Host Entry
 
-> ⚡ Steps 1 and 2 are automated by `./setup-local-domain.sh <yourlocalurl>` (or just
-> `./setup-local-domain.sh` to use `LOCAL_URLS` from `.env`). The manual steps below explain what it does.
+> ⚡ Steps 1 and 2 are automated by `./scripts/setup-local-domain.sh <yourlocalurl>` (or just
+> `./scripts/setup-local-domain.sh` to use `LOCAL_URLS` from `.env`). The manual steps below explain what it does.
 
 Edit your `/etc/hosts` file:
 
@@ -127,16 +136,16 @@ Either run your wordpress environment and set up a database or use your credenti
 **Import a dump** (defaults to `db.sql` in this directory):
 
 ```bash
-./import-db.sh                 # imports ./db.sql
-./import-db.sh local_dump.sql  # or a specific file
+./scripts/import-db.sh                 # imports ./db.sql
+./scripts/import-db.sh local_dump.sql  # or a specific file
 ```
 
 **Rewrite the domain** of an imported backup to your local one. Prefer doing it *after* import with
 `update-db-domains.sh`, which uses wp-cli and safely rewrites serialized data:
 
 ```bash
-./update-db-domains.sh myoldwebsite.com   # new domain defaults to first LOCAL_URLS entry
-./update-db-domains.sh myoldwebsite.com mysite.local
+./scripts/update-db-domains.sh myoldwebsite.com   # new domain defaults to first LOCAL_URLS entry
+./scripts/update-db-domains.sh myoldwebsite.com mysite.local
 ```
 
 Alternatively, rewrite the `.sql` *before* importing (does not handle serialized data):
