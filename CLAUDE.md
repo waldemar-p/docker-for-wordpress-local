@@ -48,7 +48,7 @@ docker compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} ${MYSQL_DATABASE}  
 Helper scripts (all in `scripts/`, same style — emoji status output) source shared helpers from `scripts/lib.sh`:
 
 ```bash
-./scripts/import-db.sh [file.sql]            # import a dump (default: ./db.sql) into the db container
+./scripts/import-db.sh [file.sql]            # import a dump (default: ./db.sql); if target DB has tables, prompts to drop+recreate (default No)
 ./scripts/setup-local-domain.sh [url...]     # /etc/hosts + host-Nginx http+https reverse proxy (self-signed cert via Docker) + reload (default: LOCAL_URLS); uses sudo
 ./scripts/update-db-domains.sh <old> [new]   # rewrite domain in live DB (wp-cli, raw-SQL fallback) + wp-config.php constants + report hard-coded hits (new default: first LOCAL_URLS)
 ./scripts/scan-wp-files.sh [dir]             # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)

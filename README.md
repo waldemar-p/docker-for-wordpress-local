@@ -44,7 +44,7 @@ All scripts live in `scripts/` and are run **from the project root**.
 | Script | Purpose |
 | --- | --- |
 | `./scripts/fill-wp-config-creds.sh` | Inject `.env` DB credentials and table prefix into `wordpress/wp-config.php`. |
-| `./scripts/import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). |
+| `./scripts/import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). If the target DB already has tables, prompts to drop & recreate it first (default **No** keeps it and imports on top). |
 | `./scripts/setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s) serving **both http and https** (self-signed cert generated via Docker), then test & reload Nginx. Prompts before overwriting an existing config. Defaults to `LOCAL_URLS`. |
 | `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain everywhere WordPress reads it: the live DB (wp-cli, with raw-SQL fallback), `wp-config.php` constants (`WP_HOME`/`WP_SITEURL`/`DOMAIN_CURRENT_SITE`), plus a report of any hard-coded hits in `wp-content/`. `new` defaults to the first `LOCAL_URLS` entry. |
 | `./scripts/scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
@@ -145,6 +145,12 @@ Either run your wordpress environment and set up a database or use your credenti
 ./scripts/import-db.sh                 # imports ./db.sql
 ./scripts/import-db.sh local_dump.sql  # or a specific file
 ```
+
+If the target database already contains tables, the script reports how many and asks whether to
+drop and recreate it before importing. The prompt defaults to **No** (press Enter to keep the
+existing DB and import on top). Answer **`y`** to start from a clean slate — useful because a dump
+only recreates the tables it defines, so importing on top can leave behind stale tables the new
+dump doesn't touch.
 
 **Rewrite the domain** of an imported backup to your local one. Prefer doing it *after* import with
 `update-db-domains.sh`, which uses wp-cli and safely rewrites serialized data:
