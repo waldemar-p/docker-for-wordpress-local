@@ -43,7 +43,7 @@ All scripts live in `scripts/` and are run **from the project root**.
 
 | Script | Purpose |
 | --- | --- |
-| `./scripts/fill-wp-config-creds.sh` | Inject `.env` DB credentials and table prefix into `wordpress/wp-config.php`. |
+| `./scripts/fill-wp-config-creds.sh` | Inject `.env` DB credentials and table prefix into `wordpress/wp-config.php`, and add a reverse-proxy HTTPS-detection block so the site doesn't redirect-loop when served over `https://`. |
 | `./scripts/import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). If the target DB already has tables, prompts to drop & recreate it first (default **No** keeps it and imports on top). |
 | `./scripts/setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s) serving **both http and https** (self-signed cert generated via Docker), then test & reload Nginx. Prompts before overwriting an existing config. Defaults to `LOCAL_URLS`. |
 | `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain everywhere WordPress reads it: the live DB (wp-cli, with raw-SQL fallback), `wp-config.php` constants (`WP_HOME`/`WP_SITEURL`/`DOMAIN_CURRENT_SITE`), plus a report of any hard-coded hits in `wp-content/`. `new` defaults to the first `LOCAL_URLS` entry. |
@@ -109,6 +109,13 @@ sudo systemctl restart nginx
 > TLS server is — often yielding a **502**. `setup-local-domain.sh` therefore also emits a 443
 > block backed by a self-signed cert it generates via Docker (`certs/<yourlocalurl>.pem`,
 > installed to `/etc/nginx/certs/`). The cert is self-signed, so expect a one-time browser warning.
+>
+> ↻ **Redirect loops over HTTPS:** the host Nginx terminates TLS and proxies *plain HTTP* to the
+> container. If WordPress can't tell the original request was HTTPS, a site whose `siteurl`/`home`
+> use `https://` redirects HTTP→HTTPS forever (`ERR_TOO_MANY_REDIRECTS`).
+> `fill-wp-config-creds.sh` prevents this by adding a block to `wp-config.php` that trusts the
+> proxy's `X-Forwarded-Proto` header and sets `$_SERVER['HTTPS']` accordingly. If you wrote
+> `wp-config.php` before this was added, just re-run the script — it's idempotent.
 
 ---
 

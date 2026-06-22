@@ -34,7 +34,7 @@ relative to the current directory, not to the script's location.
 `.env` also defines **`LOCAL_URLS`** — space-separated local domain(s) used as the default by
 `setup-local-domain.sh` and `update-db-domains.sh` when no CLI args are passed.
 
-`fill-wp-config-creds.sh` loads `.env` (via `load_env`) and requires `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, and `WORDPRESS_TABLE_PREFIX` (via `require_vars`), creates `wp-config.php` from `wp-config-sample.php` if missing, then `sed`-replaces the `DB_*` defines (forcing `DB_HOST` to `db:3306`) and `$table_prefix`. It is idempotent — safe to re-run after changing `.env`.
+`fill-wp-config-creds.sh` loads `.env` (via `load_env`) and requires `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, and `WORDPRESS_TABLE_PREFIX` (via `require_vars`), creates `wp-config.php` from `wp-config-sample.php` if missing, then `sed`-replaces the `DB_*` defines (forcing `DB_HOST` to `db:3306`) and `$table_prefix`. It then injects (via `awk`, just before the `wp-settings.php` require) a reverse-proxy HTTPS-detection block that trusts `X-Forwarded-Proto` and sets `$_SERVER['HTTPS']` — without it, a site whose `siteurl`/`home` use `https://` redirect-loops forever behind the host Nginx proxy (which terminates TLS and forwards plain HTTP). The injection is guarded by a `grep` for `HTTP_X_FORWARDED_PROTO`, so the whole script stays idempotent — safe to re-run after changing `.env`.
 
 ## Common commands
 
