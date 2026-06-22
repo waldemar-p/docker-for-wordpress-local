@@ -9,6 +9,11 @@ First execute `cp .env.example .env` and fill out the credentials. Set `LOCAL_UR
 domain(s) — space-separated if you want more than one (e.g. `LOCAL_URLS="mysite.local www.mysite.local"`).
 Afterwards run the `fill-wp-config-creds.sh` to magically fill the credentials into your `wp-config.php`.
 
+> ⚠️ **`WORDPRESS_TABLE_PREFIX`**: leave this at the default `wp_`. Only change it if you are
+> importing an existing WordPress database whose tables use a different prefix — and then it must
+> match that database's prefix **exactly** (including any trailing underscore, e.g. `wp_mysite_`).
+> A mismatch makes wp-cli report *"the site you have requested is not installed"*.
+
 ---
 
 ## 🛠 Helper scripts
