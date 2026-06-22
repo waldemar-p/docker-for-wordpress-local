@@ -1,6 +1,25 @@
 
 # Local Docker Setup
 
+## ⚡ TL;DR — quick start
+
+```bash
+cp .env.example .env          # then edit credentials, PROJECT_NAME, LOCAL_URLS
+docker compose up -d          # boot; WordPress core auto-populates ./wordpress
+./fill-wp-config-creds.sh     # write .env creds into wordpress/wp-config.php
+
+# Optional — restore an existing site from a dump:
+./import-db.sh db.sql              # import ./db.sql (set WORDPRESS_TABLE_PREFIX to match it first!)
+./update-db-domains.sh old.com     # rewrite domain → first LOCAL_URLS entry
+
+# Optional — reach it via a clean domain instead of localhost:8080:
+./setup-local-domain.sh            # /etc/hosts + host-Nginx proxy for LOCAL_URLS (uses sudo)
+```
+
+Site is now at `http://localhost:8080` (or `http://<LOCAL_URLS>` after the last step).
+
+---
+
 The string `<yourlocalurl>` and `<yourlocaldomain>` are placeholder for your real local url and domain (with and without protocol).
 
 To access your WordPress Docker container through a clean domain (like `http://<yourlocalurl>`) instead of `http://localhost:8080`, configure your **local Nginx** as a reverse proxy.
