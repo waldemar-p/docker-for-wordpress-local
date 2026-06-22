@@ -19,6 +19,7 @@ Afterwards run the `fill-wp-config-creds.sh` to magically fill the credentials i
 | `import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). |
 | `setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s), then test & reload Nginx. Defaults to `LOCAL_URLS`. |
 | `update-db-domains.sh <old> [new]` | Rewrite the site domain inside the live DB (wp-cli, with raw-SQL fallback). `new` defaults to the first `LOCAL_URLS` entry. |
+| `scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
 
 Steps 1–4 below describe what these scripts automate.
 

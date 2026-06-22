@@ -47,7 +47,14 @@ Helper scripts (all root-level, match `fill-wp-config-creds.sh` style — load `
 ./import-db.sh [file.sql]              # import a dump (default: ./db.sql) into the db container
 ./setup-local-domain.sh [url...]       # /etc/hosts + host-Nginx reverse proxy + reload (default: LOCAL_URLS); uses sudo
 ./update-db-domains.sh <old> [new]     # rewrite domain in live DB via wp-cli, raw-SQL fallback (new default: first LOCAL_URLS)
+./scan-wp-files.sh [dir]               # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
 ```
+
+`scan-wp-files.sh` is hybrid and **report-only** (never deletes): Layer 1 is a self-contained
+filesystem scan (whitelist of standard WP root entries flags unknown top-level files, plus
+suspicious-pattern rules — PHP inside `wp-content/uploads/`, archives/`.sql` dumps, editor/VCS
+junk); Layer 2 runs `docker compose run --rm wpcli wp core verify-checksums` when the `wordpress`
+container is up, and is silently skipped otherwise.
 
 `update-db-domains.sh` prefers wp-cli (`docker compose run --rm wpcli wp search-replace ...`) because it
 rewrites serialized data correctly; it falls back to raw SQL `REPLACE` across `${prefix}options/posts/postmeta`
