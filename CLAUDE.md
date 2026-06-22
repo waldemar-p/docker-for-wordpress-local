@@ -49,8 +49,8 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 
 ```bash
 ./scripts/import-db.sh [file.sql]            # import a dump (default: ./db.sql) into the db container
-./scripts/setup-local-domain.sh [url...]     # /etc/hosts + host-Nginx reverse proxy + reload (default: LOCAL_URLS); uses sudo
-./scripts/update-db-domains.sh <old> [new]   # rewrite domain in live DB via wp-cli, raw-SQL fallback (new default: first LOCAL_URLS)
+./scripts/setup-local-domain.sh [url...]     # /etc/hosts + host-Nginx http+https reverse proxy (self-signed cert via Docker) + reload (default: LOCAL_URLS); uses sudo
+./scripts/update-db-domains.sh <old> [new]   # rewrite domain in live DB (wp-cli, raw-SQL fallback) + wp-config.php constants + report hard-coded hits (new default: first LOCAL_URLS)
 ./scripts/scan-wp-files.sh [dir]             # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
 ```
 
@@ -76,9 +76,18 @@ saying so. Only mismatches under `wp-admin/`/`wp-includes/` or unexpected extra 
 `update-db-domains.sh` prefers wp-cli (`docker compose run --rm wpcli wp search-replace ...`) because it
 rewrites serialized data correctly; it falls back to raw SQL `REPLACE` across `${prefix}options/posts/postmeta`
 only if wp-cli can't run. For a dump from another domain, the raw `sed`-on-`.sql` approach (README §4) is the
-pre-import alternative but does not handle serialized data.
+pre-import alternative but does not handle serialized data. After the DB rewrite it also updates any defined
+`wp-config.php` constants (`WP_HOME`, `WP_SITEURL`, `DOMAIN_CURRENT_SITE`) via `wp config set` — so multisite
+no longer needs a manual `DOMAIN_CURRENT_SITE` edit — and finally **reports** (does not edit) any literal
+occurrences of the old domain hard-coded in `wp-content/` source files.
 
-Remember to update `DOMAIN_CURRENT_SITE` in `wp-config.php` if it's set (multisite).
+`setup-local-domain.sh` generates a vhost serving **both `http://` and `https://`**. For HTTPS it first
+generates a self-signed cert (via a one-off `docker run --rm alpine/openssl` — no host openssl needed) into a
+gitignored `certs/` dir (reused on re-runs), installs it to `/etc/nginx/certs/`, and references it from a
+`listen 443 ssl` block. Without its own 443 vhost, `https://<domain>` falls through to whatever the host's
+default TLS server is — frequently a 502. The script **prompts before overwriting** an existing
+`/etc/nginx/sites-available/<domain>.conf`. The self-signed cert triggers a one-time browser warning;
+trusting it (OS/browser trust store) is an optional manual step.
 
 ## Notes
 

@@ -13,12 +13,12 @@ docker compose up -d                 # boot; WordPress core auto-populates ./wor
 ./scripts/update-db-domains.sh old.com   # rewrite domain → first LOCAL_URLS entry
 
 # Optional — reach it via a clean domain instead of localhost:8080:
-./scripts/setup-local-domain.sh          # /etc/hosts + host-Nginx proxy for LOCAL_URLS (uses sudo)
+./scripts/setup-local-domain.sh          # /etc/hosts + host-Nginx http+https proxy for LOCAL_URLS (uses sudo)
 ```
 
 > All helper scripts live in `scripts/` — run them **from the project root** (as shown above).
 
-Site is now at `http://localhost:8080` (or `http://<LOCAL_URLS>` after the last step).
+Site is now at `http://localhost:8080` (or `http://<LOCAL_URLS>` / `https://<LOCAL_URLS>` after the last step).
 
 ---
 
@@ -45,8 +45,8 @@ All scripts live in `scripts/` and are run **from the project root**.
 | --- | --- |
 | `./scripts/fill-wp-config-creds.sh` | Inject `.env` DB credentials and table prefix into `wordpress/wp-config.php`. |
 | `./scripts/import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). |
-| `./scripts/setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s), then test & reload Nginx. Defaults to `LOCAL_URLS`. |
-| `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain inside the live DB (wp-cli, with raw-SQL fallback). `new` defaults to the first `LOCAL_URLS` entry. |
+| `./scripts/setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s) serving **both http and https** (self-signed cert generated via Docker), then test & reload Nginx. Prompts before overwriting an existing config. Defaults to `LOCAL_URLS`. |
+| `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain everywhere WordPress reads it: the live DB (wp-cli, with raw-SQL fallback), `wp-config.php` constants (`WP_HOME`/`WP_SITEURL`/`DOMAIN_CURRENT_SITE`), plus a report of any hard-coded hits in `wp-content/`. `new` defaults to the first `LOCAL_URLS` entry. |
 | `./scripts/scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
 
 > ℹ️ `scan-wp-files.sh` may report `wp-config-sample.php` failing checksum verification (with a
@@ -104,6 +104,12 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
+> 🔒 **HTTPS:** browsers auto-upgrade bare hostnames to `https://`. If your domain has no
+> `listen 443 ssl` block of its own, the request falls through to whatever the host's *default*
+> TLS server is — often yielding a **502**. `setup-local-domain.sh` therefore also emits a 443
+> block backed by a self-signed cert it generates via Docker (`certs/<yourlocalurl>.pem`,
+> installed to `/etc/nginx/certs/`). The cert is self-signed, so expect a one-time browser warning.
+
 ---
 
 ## 🚀 3. Verify Setup
@@ -157,4 +163,5 @@ sed -i 's/\(www\.\)myoldwebsite.com/<yourlocaldomain>/g' local_dump.sql
 
 Afterwards you can easily import the sql as root user and start coding! 🚀
 
-PS: If already set, don't forget to change DOMAIN_CURRENT_SITE to your `<yourlocaldomain>`
+PS: For multisite, `DOMAIN_CURRENT_SITE` in `wp-config.php` is updated automatically by
+`update-db-domains.sh` (along with `WP_HOME`/`WP_SITEURL` if defined) — no manual edit needed.

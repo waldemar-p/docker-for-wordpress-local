@@ -54,3 +54,24 @@ else
   echo "⚠️  wp-cli search-replace failed (WordPress core may not be installed)."
   raw_sql_fallback
 fi
+
+# wp-config.php constants WordPress reads outside the DB (e.g. multisite, hard-set URLs).
+# Only rewrite constants that are actually defined and contain the old domain.
+echo "🧩 Checking wp-config.php constants ..."
+for const in WP_HOME WP_SITEURL DOMAIN_CURRENT_SITE; do
+  cur="$(docker compose run --rm wpcli wp config get "$const" 2>/dev/null)" || continue
+  case "$cur" in
+    *"$OLD"*)
+      docker compose run --rm wpcli wp config set "$const" "${cur//$OLD/$NEW}"
+      echo "   • $const updated"
+      ;;
+  esac
+done
+
+# Report-only: literal occurrences on disk that wp-cli can't reach (theme/plugin source).
+# These are NOT auto-edited — rewriting source files is risky and out of scope.
+hits="$(docker compose run --rm wpcli sh -c "grep -rIl '$OLD' /var/www/html/wp-content 2>/dev/null" || true)"
+if [ -n "$hits" ]; then
+  echo "⚠️  '$OLD' also appears hard-coded in these files (review/replace manually):"
+  echo "$hits" | sed 's/^/   • /'
+fi
