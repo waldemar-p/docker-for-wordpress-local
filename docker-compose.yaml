@@ -40,3 +40,18 @@ services:
       - ./db:/var/lib/mysql
     ports:
       - "3306:3306"
+
+  # One-off wp-cli runner. Kept out of `docker compose up -d` via the "cli" profile.
+  # Invoke with: docker compose run --rm wpcli wp <command>
+  wpcli:
+    image: wordpress:cli
+    profiles: ["cli"]
+    depends_on:
+      - db
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: ${MYSQL_USER}
+      WORDPRESS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      WORDPRESS_DB_NAME: ${MYSQL_DATABASE}
+    volumes:
+      - ./wordpress:/var/www/html
