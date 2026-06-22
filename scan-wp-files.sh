@@ -16,13 +16,11 @@ if [ ! -d "$WP_DIR" ]; then
   exit 1
 fi
 
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
+
 # Load .env (only needed to enable the optional wp-cli layer) — soft guard.
-ENV_LOADED=1
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
-else
-  ENV_LOADED=0
-fi
+load_env soft
 
 declare -A FLAGGED                  # relative path -> 1 (dedups items flagged twice)
 
@@ -88,7 +86,7 @@ report_find() {
 # PHP inside uploads — uploads should never contain executable PHP (backdoor signal).
 if [ -d "$WP_DIR/wp-content/uploads" ]; then
   report_find "🚨 PHP files inside wp-content/uploads (possible backdoor):" \
-    < <(find "$WP_DIR/wp-content/uploads" -type f -name '*.php' 2>/dev/null)
+    < <(find "$WP_DIR/wp-content/uploads" -type f -name '*.php')
 fi
 
 # Archives / DB dumps / swap files anywhere.
@@ -97,13 +95,13 @@ report_find "⚠️  Archives / database dumps / swap files:" < <(find "$WP_DIR"
   -o -name '*.gz' -o -name '*.rar' -o -name '*.7z' -o -name '*.sql' \
   -o -name '*.bak' -o -name '*.old' -o -name '*.orig' -o -name '*.save' \
   -o -name '*.swp' -o -name '*.swo' \
-  \) 2>/dev/null)
+  \))
 
 # Editor / OS / VCS junk.
 report_find "⚠️  Editor / OS / VCS junk:" < <(find "$WP_DIR" \( \
   -type f \( -name '.DS_Store' -o -name 'Thumbs.db' -o -name '*~' \) \
   -o -type d \( -name '.git' -o -name '.svn' \) \
-  \) 2>/dev/null)
+  \))
 
 # --- Layer 2: wp-cli checksums (optional) --------------------------------------
 echo ""

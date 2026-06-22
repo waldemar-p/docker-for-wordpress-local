@@ -9,10 +9,11 @@ set -e
 # Usage: ./setup-local-domain.sh [url ...]
 #   URLs default to LOCAL_URLS from .env when no arguments are given.
 
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
+
 # Load environment variables from .env file (for the LOCAL_URLS fallback)
-if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
-fi
+load_env soft
 
 # Determine the URL list: CLI args take precedence, else LOCAL_URLS from .env
 if [ "$#" -gt 0 ]; then

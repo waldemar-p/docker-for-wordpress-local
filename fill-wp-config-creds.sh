@@ -3,22 +3,14 @@ set -e
 
 WP_DIR="wordpress"
 
-# Load environment variables from .env file
-if [ ! -f .env ]; then
-  echo "❌ .env file not found!"
-  exit 1
-fi
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 
-export $(grep -v '^#' .env | xargs)
+# Load environment variables from .env file
+load_env
 
 # Get required variables
-REQUIRED_VARS=("MYSQL_DATABASE" "MYSQL_USER" "MYSQL_PASSWORD" "WORDPRESS_TABLE_PREFIX")
-for var in "${REQUIRED_VARS[@]}"; do
-  if [ -z "${!var}" ]; then
-    echo "❌ Missing required variable: $var"
-    exit 1
-  fi
-done
+require_vars MYSQL_DATABASE MYSQL_USER MYSQL_PASSWORD WORDPRESS_TABLE_PREFIX
 
 # Check if wordpress folder exists
 if [ ! -d "$WP_DIR" ]; then
@@ -45,7 +37,6 @@ sed -i "s@define(\s*['\"]DB_NAME['\"],\s*['\"].*['\"]\s*);@define( 'DB_NAME', '$
 sed -i "s@define(\s*['\"]DB_USER['\"],\s*['\"].*['\"]\s*);@define( 'DB_USER', '${MYSQL_USER}' );@" "$WP_CONFIG"
 sed -i "s@define(\s*['\"]DB_PASSWORD['\"],\s*['\"].*['\"]\s*);@define( 'DB_PASSWORD', '${MYSQL_PASSWORD}' );@" "$WP_CONFIG"
 sed -i "s@define(\s*['\"]DB_HOST['\"],\s*['\"].*['\"]\s*);@define( 'DB_HOST', 'db:3306' );@" "$WP_CONFIG"
-
 
 # Update table prefix
 sed -i "s@^\$table_prefix\s*=\s*['\"].*\s*;@\$table_prefix = '${WORDPRESS_TABLE_PREFIX}';@" "$WP_CONFIG"

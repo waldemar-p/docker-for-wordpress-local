@@ -8,7 +8,7 @@ A minimal Docker Compose setup for running WordPress locally for development. Th
 
 ## Architecture
 
-Three services in `docker-compose.yaml`, all driven by variables from `.env`:
+Four services in `docker-compose.yaml`, all driven by variables from `.env`:
 
 - **`wordpress`** — `wordpress:php8.2-fpm`. PHP-FPM only (no web server), listening on port 9000. Talks to `db:3306`.
 - **`nginx`** — `nginx:latest`, exposed on host **`8080:80`**. Serves static files and reverse-proxies `*.php` to `wordpress:9000` via FastCGI. Config is `nginx.conf`, mounted read-only at `/etc/nginx/conf.d/default.conf`.
@@ -30,7 +30,7 @@ docker compose up -d          # WordPress core auto-populates ./wordpress on fir
 `.env` also defines **`LOCAL_URLS`** — space-separated local domain(s) used as the default by
 `setup-local-domain.sh` and `update-db-domains.sh` when no CLI args are passed.
 
-`fill-wp-config-creds.sh` reads `.env`, requires `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, and `WORDPRESS_TABLE_PREFIX`, creates `wp-config.php` from `wp-config-sample.php` if missing, then `sed`-replaces the `DB_*` defines (forcing `DB_HOST` to `db:3306`) and `$table_prefix`. It is idempotent — safe to re-run after changing `.env`.
+`fill-wp-config-creds.sh` loads `.env` (via `load_env`) and requires `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, and `WORDPRESS_TABLE_PREFIX` (via `require_vars`), creates `wp-config.php` from `wp-config-sample.php` if missing, then `sed`-replaces the `DB_*` defines (forcing `DB_HOST` to `db:3306`) and `$table_prefix`. It is idempotent — safe to re-run after changing `.env`.
 
 ## Common commands
 
@@ -41,7 +41,7 @@ docker compose logs -f nginx  # tail a service
 docker compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} ${MYSQL_DATABASE}   # DB shell
 ```
 
-Helper scripts (all root-level, match `fill-wp-config-creds.sh` style — load `.env`, validate, emoji status):
+Helper scripts (all root-level, same style — emoji status output) source shared helpers from `lib.sh`:
 
 ```bash
 ./import-db.sh [file.sql]              # import a dump (default: ./db.sql) into the db container
@@ -49,6 +49,16 @@ Helper scripts (all root-level, match `fill-wp-config-creds.sh` style — load `
 ./update-db-domains.sh <old> [new]     # rewrite domain in live DB via wp-cli, raw-SQL fallback (new default: first LOCAL_URLS)
 ./scan-wp-files.sh [dir]               # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
 ```
+
+`lib.sh` is **sourced, not executed** (no shebang). Each script begins with
+`source "$(dirname "$0")/lib.sh"` and then calls its helpers instead of inlining the logic:
+
+- `load_env [hard|soft]` — parse `.env` and `export` its vars (skips blanks/comments, strips one
+  pair of surrounding quotes, keeps space-separated values like `LOCAL_URLS` intact). Default
+  `hard` exits if `.env` is missing; `soft` instead sets `ENV_LOADED=0` and returns (used by
+  `setup-local-domain.sh` and `scan-wp-files.sh`, where `.env` is optional). Sets `ENV_LOADED=1` on success.
+- `require_vars VAR...` — exit with `❌ Missing required variable` if any named var is empty.
+- `require_db_running` — exit if the `db` container isn't up.
 
 `scan-wp-files.sh` is hybrid and **report-only** (never deletes): Layer 1 is a self-contained
 filesystem scan (whitelist of standard WP root entries flags unknown top-level files, plus

@@ -6,22 +6,14 @@ set -e
 
 FILE="${1:-db.sql}"
 
-# Load environment variables from .env file
-if [ ! -f .env ]; then
-  echo "❌ .env file not found!"
-  exit 1
-fi
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 
-export $(grep -v '^#' .env | xargs)
+# Load environment variables from .env file
+load_env
 
 # Get required variables
-REQUIRED_VARS=("MYSQL_ROOT_PASSWORD" "MYSQL_DATABASE")
-for var in "${REQUIRED_VARS[@]}"; do
-  if [ -z "${!var}" ]; then
-    echo "❌ Missing required variable: $var"
-    exit 1
-  fi
-done
+require_vars MYSQL_ROOT_PASSWORD MYSQL_DATABASE
 
 # Check the dump file exists
 if [ ! -f "$FILE" ]; then
@@ -30,10 +22,7 @@ if [ ! -f "$FILE" ]; then
 fi
 
 # Check the db container is running
-if [ -z "$(docker compose ps -q db)" ]; then
-  echo "❌ The 'db' container is not running. Start it with: docker compose up -d"
-  exit 1
-fi
+require_db_running
 
 echo "⛁  Importing '$FILE' into database '${MYSQL_DATABASE}' ..."
 

@@ -8,22 +8,14 @@ set -e
 # Primary path uses wp-cli (serialized-data safe). If wp-cli can't run
 # (e.g. WordPress core/files not present), it falls back to a raw SQL REPLACE.
 
-# Load environment variables from .env file
-if [ ! -f .env ]; then
-  echo "❌ .env file not found!"
-  exit 1
-fi
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 
-export $(grep -v '^#' .env | xargs)
+# Load environment variables from .env file
+load_env
 
 # Get required variables
-REQUIRED_VARS=("MYSQL_ROOT_PASSWORD" "MYSQL_DATABASE" "WORDPRESS_TABLE_PREFIX")
-for var in "${REQUIRED_VARS[@]}"; do
-  if [ -z "${!var}" ]; then
-    echo "❌ Missing required variable: $var"
-    exit 1
-  fi
-done
+require_vars MYSQL_ROOT_PASSWORD MYSQL_DATABASE WORDPRESS_TABLE_PREFIX
 
 OLD="$1"
 # shellcheck disable=SC2206
@@ -36,10 +28,7 @@ if [ -z "$OLD" ] || [ -z "$NEW" ]; then
 fi
 
 # Check the db container is running
-if [ -z "$(docker compose ps -q db)" ]; then
-  echo "❌ The 'db' container is not running. Start it with: docker compose up -d"
-  exit 1
-fi
+require_db_running
 
 PREFIX="$WORDPRESS_TABLE_PREFIX"
 
