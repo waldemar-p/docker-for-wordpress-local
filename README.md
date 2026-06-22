@@ -48,6 +48,7 @@ All scripts live in `scripts/` and are run **from the project root**.
 | `./scripts/setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s) serving **both http and https** (self-signed cert generated via Docker), then test & reload Nginx. Prompts before overwriting an existing config. Defaults to `LOCAL_URLS`. |
 | `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain everywhere WordPress reads it: the live DB (wp-cli, with raw-SQL fallback), `wp-config.php` constants (`WP_HOME`/`WP_SITEURL`/`DOMAIN_CURRENT_SITE`), plus a report of any hard-coded hits in `wp-content/`. `new` defaults to the first `LOCAL_URLS` entry. |
 | `./scripts/scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
+| `./scripts/recreate-containers.sh` | Cleanly stop & remove this project's containers (`docker compose down --remove-orphans`) and recreate them (`up -d`). On-disk data in `./db` and `./wordpress` is preserved. |
 
 > ℹ️ `scan-wp-files.sh` may report `wp-config-sample.php` failing checksum verification (with a
 > *"doesn't verify against checksums"* error). This is **expected** — the official WordPress Docker

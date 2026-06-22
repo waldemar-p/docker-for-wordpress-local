@@ -52,6 +52,7 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 ./scripts/setup-local-domain.sh [url...]     # /etc/hosts + host-Nginx http+https reverse proxy (self-signed cert via Docker) + reload (default: LOCAL_URLS); uses sudo
 ./scripts/update-db-domains.sh <old> [new]   # rewrite domain in live DB (wp-cli, raw-SQL fallback) + wp-config.php constants + report hard-coded hits (new default: first LOCAL_URLS)
 ./scripts/scan-wp-files.sh [dir]             # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
+./scripts/recreate-containers.sh             # docker compose down --remove-orphans + up -d (wipes containers; ./db & ./wordpress persist)
 ```
 
 `scripts/lib.sh` is **sourced, not executed** (no shebang). Each script begins with
