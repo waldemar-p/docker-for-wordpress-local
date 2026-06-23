@@ -8,7 +8,7 @@ A minimal Docker Compose setup for running WordPress locally over a clean
 
 ```bash
 cp .env.example .env                 # then edit credentials, PROJECT_NAME, SITE_HOST
-docker compose up -d                 # boot; WordPress core + wp-config.php auto-populate
+./scripts/start.sh                   # boot (frees ports 80/443 if needed); core + wp-config.php auto-populate
 ```
 
 Open **`https://wpproject.localhost`** (or whatever you set `SITE_HOST` to).
@@ -72,7 +72,9 @@ All scripts live in `scripts/` and are run **from the project root**.
 | `./scripts/import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). If the target DB already has tables, prompts to drop & recreate it first (default **No** keeps it and imports on top). |
 | `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain everywhere WordPress reads it: the live DB (wp-cli, with raw-SQL fallback), `wp-config.php` constants (`WP_HOME`/`WP_SITEURL`/`DOMAIN_CURRENT_SITE`), plus a report of any hard-coded hits in `wp-content/`. `new` defaults to `SITE_HOST`. |
 | `./scripts/scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
-| `./scripts/recreate-containers.sh` | Cleanly stop & remove this project's containers (`docker compose down --remove-orphans`) and recreate them (`up -d`). On-disk data in `./db` and `./wordpress` is preserved. |
+| `./scripts/start.sh` | Bring the stack up (`docker compose up -d`), first checking the host ports it needs to publish (80/443/…) and offering to stop whatever is holding them. |
+| `./scripts/remove-all.sh [-y]` | **Destructive.** Remove all state: containers + named volumes (`down -v`) and the on-disk `./db` and `./wordpress`. Prompts for `yes` first (`-y` skips). |
+| `./scripts/reset-state.sh [-y]` | Full reset to a clean slate: runs `remove-all.sh` then `start.sh` → fresh WordPress core and an empty database. |
 
 > ℹ️ `scan-wp-files.sh` may report `wp-config-sample.php` failing checksum verification (with a
 > *"doesn't verify against checksums"* error). This is **expected** — the official WordPress Docker
@@ -122,8 +124,9 @@ PS: For multisite, `DOMAIN_CURRENT_SITE` is updated automatically by `update-db-
 ## Common commands
 
 ```bash
-docker compose up -d          # start
+./scripts/start.sh            # start (frees host ports first, then up -d)
 docker compose down           # stop (DB and WP files persist on disk)
+./scripts/reset-state.sh      # wipe ALL state and start fresh
 docker compose logs -f caddy  # tail a service
 docker compose exec caddy caddy trust   # trust the local HTTPS cert (one-time, optional)
 docker compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} ${MYSQL_DATABASE}   # DB shell

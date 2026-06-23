@@ -75,7 +75,9 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 ./scripts/import-db.sh [file.sql]            # import a dump (default: ./db.sql); if target DB has tables, prompts to drop+recreate (default No)
 ./scripts/update-db-domains.sh <old> [new]   # rewrite domain in live DB (wp-cli, raw-SQL fallback) + wp-config.php constants + report hard-coded hits (new default: SITE_HOST)
 ./scripts/scan-wp-files.sh [dir]             # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
-./scripts/recreate-containers.sh             # docker compose down --remove-orphans + up -d (wipes containers; ./db & ./wordpress persist)
+./scripts/start.sh                           # free needed host ports (80/443/…) then docker compose up -d
+./scripts/remove-all.sh [-y]                 # DESTRUCTIVE: down -v + delete ./db and ./wordpress (prompts; -y skips)
+./scripts/reset-state.sh [-y]                # full reset: remove-all.sh then start.sh (fresh core + empty DB)
 ```
 
 `scripts/lib.sh` is **sourced, not executed** (no shebang). Each script begins with
@@ -87,6 +89,8 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
   `ENV_LOADED=1` on success.
 - `require_vars VAR...` — exit with `❌ Missing required variable` if any named var is empty.
 - `require_db_running` — exit if the `db` container isn't up.
+- `compose_published_ports` — echo the unique host ports this compose project publishes (parsed from `docker compose config`).
+- `port_in_use PORT` / `free_port PORT` — check whether a TCP port has a listener, and (interactively, default No) offer to stop whatever holds it: a Docker container (Case 1, `docker stop`), or a host process / systemd service (Case 2, `sudo systemctl stop`/`sudo kill`). Used by `start.sh` before `up`.
 
 `scan-wp-files.sh` is hybrid and **report-only** (never deletes): Layer 1 is a self-contained
 filesystem scan (whitelist of standard WP root entries flags unknown top-level files, plus

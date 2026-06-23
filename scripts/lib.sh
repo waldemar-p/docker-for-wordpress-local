@@ -50,3 +50,76 @@ require_db_running() {
     exit 1
   fi
 }
+
+# Echo the unique host ports this compose project publishes (one per line).
+compose_published_ports() {
+  docker compose config 2>/dev/null \
+    | awk '/published:/ { gsub(/[^0-9]/, "", $2); if ($2 != "") print $2 }' \
+    | sort -un
+}
+
+# Return 0 if something is LISTENing on TCP $1, else 1.
+port_in_use() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    [ -n "$(ss -ltnH "sport = :$port" 2>/dev/null)" ]
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$port" -sTCP:LISTEN -n -P >/dev/null 2>&1
+  else
+    return 1   # no tool to check with — assume free
+  fi
+}
+
+# If TCP $1 is occupied, identify what holds it (a Docker container, or a host
+# process / systemd service) and OFFER to stop it. Always prompts; default No;
+# never force-stops without approval. Call AFTER `docker compose down` so this
+# project's own containers have already released their ports.
+free_port() {
+  local port="$1" ans
+  port_in_use "$port" || return 0
+
+  echo "⚠️  Port ${port} is already in use."
+
+  # Case 1: another Docker container publishing this host port.
+  local cname
+  cname="$(docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null \
+            | awk -v p="$port" '$0 ~ (":" p "->") { print $1; exit }')"
+  if [ -n "$cname" ]; then
+    read -r -p "   Stop Docker container '${cname}'? [y/N] " ans
+    case "$ans" in
+      [yY]|[yY][eE][sS]) docker stop "$cname" >/dev/null && echo "   • stopped container '${cname}'" ;;
+      *) echo "   ↩️  Left '${cname}' running — 'up' may fail to bind ${port}." ;;
+    esac
+    return 0
+  fi
+
+  # Case 2: a host process. Reading another user's PID from ss needs root.
+  local pid
+  pid="$(ss -ltnpH "sport = :$port" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+  [ -z "$pid" ] && pid="$(sudo ss -ltnpH "sport = :$port" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+
+  if [ -z "$pid" ]; then
+    echo "   ❓ Couldn't identify the process on ${port}. Free it manually, then re-run."
+    return 0
+  fi
+
+  local comm unit
+  comm="$(ps -o comm= -p "$pid" 2>/dev/null)"
+  # /proc/<pid>/cgroup is world-readable; the trailing .service is the systemd unit.
+  unit="$(grep -oE '[a-zA-Z0-9@._-]+\.service' "/proc/$pid/cgroup" 2>/dev/null | grep -v '^docker\.service$' | head -1)"
+
+  if [ -n "$unit" ]; then
+    # Stopping the unit is safer than killing the PID (systemd would respawn it).
+    read -r -p "   Stop service '${unit}' (process '${comm}', pid ${pid})? [y/N] " ans
+    case "$ans" in
+      [yY]|[yY][eE][sS]) sudo systemctl stop "$unit" && echo "   • stopped service '${unit}'" ;;
+      *) echo "   ↩️  Left '${unit}' running — 'up' may fail to bind ${port}." ;;
+    esac
+  else
+    read -r -p "   Kill process '${comm}' (pid ${pid})? [y/N] " ans
+    case "$ans" in
+      [yY]|[yY][eE][sS]) sudo kill "$pid" && echo "   • killed pid ${pid} (${comm})" ;;
+      *) echo "   ↩️  Left pid ${pid} running — 'up' may fail to bind ${port}." ;;
+    esac
+  fi
+}
