@@ -1,39 +1,65 @@
 
-# Local Docker Setup
+# Local Docker WordPress
+
+A minimal Docker Compose setup for running WordPress locally over a clean
+`https://<name>.localhost` domain — **no host web server, no `/etc/hosts` edits, no manual certs.**
 
 ## ⚡ TL;DR — quick start
 
 ```bash
-cp .env.example .env                 # then edit credentials, PROJECT_NAME, LOCAL_URLS
-docker compose up -d                 # boot; WordPress core auto-populates ./wordpress
-./scripts/fill-wp-config-creds.sh    # write .env creds into wordpress/wp-config.php
+cp .env.example .env                 # then edit credentials, PROJECT_NAME, SITE_HOST
+docker compose up -d                 # boot; WordPress core + wp-config.php auto-populate
+```
 
+Open **`https://wpproject.localhost`** (or whatever you set `SITE_HOST` to).
+
+```bash
 # Optional — restore an existing site from a dump:
 ./scripts/import-db.sh db.sql            # import ./db.sql (set WORDPRESS_TABLE_PREFIX to match it first!)
-./scripts/update-db-domains.sh old.com   # rewrite domain → first LOCAL_URLS entry
-
-# Optional — reach it via a clean domain instead of localhost:8080:
-./scripts/setup-local-domain.sh          # /etc/hosts + host-Nginx http+https proxy for LOCAL_URLS (uses sudo)
+./scripts/update-db-domains.sh old.com   # rewrite domain → SITE_HOST
 ```
 
 > All helper scripts live in `scripts/` — run them **from the project root** (as shown above).
 
-Site is now at `http://localhost:8080` (or `http://<LOCAL_URLS>` / `https://<LOCAL_URLS>` after the last step).
-
 ---
 
-The string `<yourlocalurl>` and `<yourlocaldomain>` are placeholder for your real local url and domain (with and without protocol).
+## How it works
 
-To access your WordPress Docker container through a clean domain (like `http://<yourlocalurl>`) instead of `http://localhost:8080`, configure your **local Nginx** as a reverse proxy.
+Three containers (plus a one-off wp-cli runner), all driven by `.env`:
 
-First execute `cp .env.example .env` and fill out the credentials. Set `LOCAL_URLS` to your local
-domain(s) — space-separated if you want more than one (e.g. `LOCAL_URLS="mysite.local www.mysite.local"`).
-Afterwards run `./scripts/fill-wp-config-creds.sh` to magically fill the credentials into your `wp-config.php`.
+- **`wordpress`** — `wordpress:php8.2-fpm`. PHP-FPM only, on port 9000. The official image
+  **auto-generates `wordpress/wp-config.php`** from the `WORDPRESS_*` env vars on first boot — no
+  manual credential step.
+- **`caddy`** — `caddy:2`, the web server. Serves static files, proxies PHP via FastCGI to
+  `wordpress:9000`, and terminates **automatic local HTTPS**. Listens on host ports **80** and **443**.
+- **`db`** — `mysql:5.7`, on host `3306`.
+- **`wpcli`** — `wordpress:cli`, behind the `cli` profile (never starts with `up -d`); used by the
+  helper scripts via `docker compose run --rm wpcli wp <cmd>`.
+
+**Clean domain with zero config:** a host ending in `.localhost` resolves to `127.0.0.1`
+automatically in Chromium browsers (Chrome/Edge/Brave) and Safari — there is nothing to add to
+`/etc/hosts`. Caddy reads `SITE_HOST` from `.env` and serves that domain (see `Caddyfile`).
+
+**HTTPS with zero config:** Caddy generates its own local certificate authority and issues a cert
+for `SITE_HOST`. Because Caddy itself terminates TLS and serves PHP, WordPress sees the request as
+HTTPS natively — no redirect loops.
 
 > ⚠️ **`WORDPRESS_TABLE_PREFIX`**: leave this at the default `wp_`. Only change it if you are
 > importing an existing WordPress database whose tables use a different prefix — and then it must
 > match that database's prefix **exactly** (including any trailing underscore, e.g. `wp_mysite_`).
 > A mismatch makes wp-cli report *"the site you have requested is not installed"*.
+
+### Caveats
+
+- **Browser support for `.localhost`:** Chromium browsers and Safari resolve `*.localhost`
+  natively. Current Firefox does too; very old Firefox builds may need `network.dns.localDomains`.
+- **Ports 80/443 must be free:** if you previously ran a host-level Nginx/Apache for local sites,
+  stop it first — e.g. `sudo systemctl disable --now nginx`.
+- **Trust the cert (optional):** the site works immediately, but the browser shows a one-time
+  warning for Caddy's local CA. To remove it, run once:
+  `docker compose exec caddy caddy trust` (asks for sudo to write the system trust store).
+- **A different TLD** (e.g. `mysite.test`) works too, but then you *do* need an `/etc/hosts` entry
+  pointing it at `127.0.0.1`. `.localhost` is the zero-config option.
 
 ---
 
@@ -43,10 +69,8 @@ All scripts live in `scripts/` and are run **from the project root**.
 
 | Script | Purpose |
 | --- | --- |
-| `./scripts/fill-wp-config-creds.sh` | Inject `.env` DB credentials and table prefix into `wordpress/wp-config.php`, and add a reverse-proxy HTTPS-detection block so the site doesn't redirect-loop when served over `https://`. |
 | `./scripts/import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). If the target DB already has tables, prompts to drop & recreate it first (default **No** keeps it and imports on top). |
-| `./scripts/setup-local-domain.sh [url...]` | Add `/etc/hosts` entries + a host-Nginx reverse proxy for the URL(s) serving **both http and https** (self-signed cert generated via Docker), then test & reload Nginx. Prompts before overwriting an existing config. Defaults to `LOCAL_URLS`. |
-| `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain everywhere WordPress reads it: the live DB (wp-cli, with raw-SQL fallback), `wp-config.php` constants (`WP_HOME`/`WP_SITEURL`/`DOMAIN_CURRENT_SITE`), plus a report of any hard-coded hits in `wp-content/`. `new` defaults to the first `LOCAL_URLS` entry. |
+| `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain everywhere WordPress reads it: the live DB (wp-cli, with raw-SQL fallback), `wp-config.php` constants (`WP_HOME`/`WP_SITEURL`/`DOMAIN_CURRENT_SITE`), plus a report of any hard-coded hits in `wp-content/`. `new` defaults to `SITE_HOST`. |
 | `./scripts/scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
 | `./scripts/recreate-containers.sh` | Cleanly stop & remove this project's containers (`docker compose down --remove-orphans`) and recreate them (`up -d`). On-disk data in `./db` and `./wordpress` is preserved. |
 
@@ -55,97 +79,12 @@ All scripts live in `scripts/` and are run **from the project root**.
 > image ships a slightly modified sample file. Only mismatches under `wp-admin/`/`wp-includes/` or
 > unexpected extra files are worth investigating.
 
-Steps 1–4 below describe what these scripts automate.
-
 ---
 
-## 🧩 1. Add Host Entry
+## ⛁ Database
 
-> ⚡ Steps 1 and 2 are automated by `./scripts/setup-local-domain.sh <yourlocalurl>` (or just
-> `./scripts/setup-local-domain.sh` to use `LOCAL_URLS` from `.env`). The manual steps below explain what it does.
-
-Edit your `/etc/hosts` file:
-
-```bash
-sudo nano /etc/hosts
-```
-
-Add the following line (ensure there’s **no** IPv6 entry like `::1 <yourlocalurl>` — that can cause issues):
-
-```
-127.0.0.1   <yourlocalurl>
-```
-
----
-
-## ⚙️ 2. Add Nginx Site Configuration
-
-Create a new configuration file, for example `/etc/nginx/sites-available/<yourlocalurl>.conf`:
-
-```nginx
-server {
-    listen 80;
-    server_name <yourlocalurl>;
-
-    location / {
-        proxy_pass http://localhost:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-Enable the configuration:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/<yourlocalurl>.conf /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
-
-> 🔒 **HTTPS:** browsers auto-upgrade bare hostnames to `https://`. If your domain has no
-> `listen 443 ssl` block of its own, the request falls through to whatever the host's *default*
-> TLS server is — often yielding a **502**. `setup-local-domain.sh` therefore also emits a 443
-> block backed by a self-signed cert it generates via Docker (`certs/<yourlocalurl>.pem`,
-> installed to `/etc/nginx/certs/`). The cert is self-signed, so expect a one-time browser warning.
->
-> ↻ **Redirect loops over HTTPS:** the host Nginx terminates TLS and proxies *plain HTTP* to the
-> container. If WordPress can't tell the original request was HTTPS, a site whose `siteurl`/`home`
-> use `https://` redirects HTTP→HTTPS forever (`ERR_TOO_MANY_REDIRECTS`).
-> `fill-wp-config-creds.sh` prevents this by adding a block to `wp-config.php` that trusts the
-> proxy's `X-Forwarded-Proto` header and sets `$_SERVER['HTTPS']` accordingly. If you wrote
-> `wp-config.php` before this was added, just re-run the script — it's idempotent.
-
----
-
-## 🚀 3. Verify Setup
-
-Make sure your WordPress Docker containers are running:
-
-```bash
-docker compose up -d
-```
-
-Then visit:
-
-👉 `http://<yourlocalurl>`
-
-You should see your WordPress site without needing to include `:8080`.
-
----
-
-✅ **Tip:** If you ever see the "Welcome to nginx" or "Apache2 Default Page," double-check:
-- Your `/etc/hosts` entry (no `::1` line)
-- That your proxy configuration points to the correct port (usually `8080`)
-- That your local Nginx service is running and using the correct config
-
----
-
-## ⛁ 4. Database
-
-Either run your wordpress environment and set up a database or use your credentials to fill your database with a backup.
+A fresh `docker compose up -d` gives you an empty WordPress install ready for the web installer at
+`https://<SITE_HOST>`. To restore an existing site instead:
 
 **Import a dump** (defaults to `db.sql` in this directory):
 
@@ -164,8 +103,8 @@ dump doesn't touch.
 `update-db-domains.sh`, which uses wp-cli and safely rewrites serialized data:
 
 ```bash
-./scripts/update-db-domains.sh myoldwebsite.com   # new domain defaults to first LOCAL_URLS entry
-./scripts/update-db-domains.sh myoldwebsite.com mysite.local
+./scripts/update-db-domains.sh myoldwebsite.com   # new domain defaults to SITE_HOST
+./scripts/update-db-domains.sh myoldwebsite.com mysite.localhost
 ```
 
 Alternatively, rewrite the `.sql` *before* importing (does not handle serialized data):
@@ -175,7 +114,17 @@ sed -i 's/https?:\/\/\(www\.\)myoldwebsite.com/<yourlocalurl>/g' local_dump.sql
 sed -i 's/\(www\.\)myoldwebsite.com/<yourlocaldomain>/g' local_dump.sql
 ```
 
-Afterwards you can easily import the sql as root user and start coding! 🚀
+PS: For multisite, `DOMAIN_CURRENT_SITE` is updated automatically by `update-db-domains.sh`
+(along with `WP_HOME`/`WP_SITEURL` if defined) — no manual edit needed.
 
-PS: For multisite, `DOMAIN_CURRENT_SITE` in `wp-config.php` is updated automatically by
-`update-db-domains.sh` (along with `WP_HOME`/`WP_SITEURL` if defined) — no manual edit needed.
+---
+
+## Common commands
+
+```bash
+docker compose up -d          # start
+docker compose down           # stop (DB and WP files persist on disk)
+docker compose logs -f caddy  # tail a service
+docker compose exec caddy caddy trust   # trust the local HTTPS cert (one-time, optional)
+docker compose exec db mysql -uroot -p${MYSQL_ROOT_PASSWORD} ${MYSQL_DATABASE}   # DB shell
+```

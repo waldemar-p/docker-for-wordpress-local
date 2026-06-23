@@ -1,0 +1,19 @@
+# Caddy serves WordPress directly: static files + FastCGI to PHP-FPM, with
+# automatic local HTTPS. This replaces both the container Nginx and the old
+# host-level Nginx reverse proxy.
+#
+# `local_certs` forces Caddy's internal CA for every site, so any SITE_HOST
+# (e.g. *.localhost) gets a locally-trusted cert instead of Caddy attempting
+# a public Let's Encrypt issuance that would fail for a private domain.
+{
+	local_certs
+}
+
+# SITE_HOST comes from .env (default below). *.localhost resolves to 127.0.0.1
+# in Chromium browsers and Safari with no /etc/hosts entry.
+{$SITE_HOST:wpproject.localhost} {
+	root * /var/www/html
+	php_fastcgi wordpress:9000
+	file_server
+	encode gzip
+}
