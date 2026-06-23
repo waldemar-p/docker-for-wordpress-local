@@ -71,9 +71,10 @@ All scripts live in `scripts/` and are run **from the project root**.
 | --- | --- |
 | `./scripts/import-db.sh [file.sql]` | Import a SQL dump into the `db` container (defaults to `db.sql`). If the target DB already has tables, prompts to drop & recreate it first (default **No** keeps it and imports on top). |
 | `./scripts/update-db-domains.sh <old> [new]` | Rewrite the site domain everywhere WordPress reads it: the live DB (wp-cli, with raw-SQL fallback), `wp-config.php` constants (`WP_HOME`/`WP_SITEURL`/`DOMAIN_CURRENT_SITE`), plus a report of any hard-coded hits in `wp-content/`. `new` defaults to `SITE_HOST`. |
+| `./scripts/update-wp-config.sh` | Write the `.env` DB credentials, table prefix and `DB_HOST=db:3306` into an existing `wordpress/wp-config.php`. Needed for an imported `./wordpress` (the image only auto-generates the config when it's *missing*). Safe no-op on a fresh/image-generated config. |
 | `./scripts/scan-wp-files.sh [dir]` | Report files/folders not part of a standard WordPress install — filesystem heuristics + optional `wp core verify-checksums`. Report only; defaults to `./wordpress`. |
-| `./scripts/start.sh` | Bring the stack up (`docker compose up -d`), first checking the host ports it needs to publish (80/443/…) and offering to stop whatever is holding them. |
-| `./scripts/remove-all.sh [-y]` | **Destructive.** Remove all state: containers + named volumes (`down -v`) and the on-disk `./db` and `./wordpress`. Prompts for `yes` first (`-y` skips). |
+| `./scripts/start.sh` | Bring the stack up — frees the host ports it needs (80/443/…) first, offering to stop whatever holds them. Run interactively it then offers a **setup wizard**: fix `wp-config.php` creds → import a DB dump → rewrite the site domain. (`--no-wizard` to skip.) |
+| `./scripts/remove-all.sh [-y]` | **Destructive.** Removes containers + named volumes (`down -v`) and `./db`; asks separately whether to also delete `./wordpress` (kept by default). `-y` skips prompts and removes everything. |
 | `./scripts/reset-state.sh [-y]` | Full reset to a clean slate: runs `remove-all.sh` then `start.sh` → fresh WordPress core and an empty database. |
 
 > ℹ️ `scan-wp-files.sh` may report `wp-config-sample.php` failing checksum verification (with a

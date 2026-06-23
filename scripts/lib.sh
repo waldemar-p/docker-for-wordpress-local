@@ -51,6 +51,21 @@ require_db_running() {
   fi
 }
 
+# Wait until MySQL inside the db container accepts connections (~60s max).
+# Returns 0 once ready, 1 on timeout. Useful right after `up` on first boot,
+# when MySQL is still initialising.
+wait_for_db() {
+  local i
+  for i in $(seq 1 30); do
+    if docker compose exec -T db sh -c \
+         'exec mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --silent' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
 # Echo the unique host ports this compose project publishes (one per line).
 compose_published_ports() {
   docker compose config 2>/dev/null \

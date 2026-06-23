@@ -74,9 +74,10 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 ```bash
 ./scripts/import-db.sh [file.sql]            # import a dump (default: ./db.sql); if target DB has tables, prompts to drop+recreate (default No)
 ./scripts/update-db-domains.sh <old> [new]   # rewrite domain in live DB (wp-cli, raw-SQL fallback) + wp-config.php constants + report hard-coded hits (new default: SITE_HOST)
+./scripts/update-wp-config.sh                # write .env DB creds/prefix/DB_HOST into an EXISTING wordpress/wp-config.php (for imported sites; no-op on image-generated config)
 ./scripts/scan-wp-files.sh [dir]             # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
-./scripts/start.sh                           # free needed host ports (80/443/…) then docker compose up -d
-./scripts/remove-all.sh [-y]                 # DESTRUCTIVE: down -v + delete ./db and ./wordpress (prompts; -y skips)
+./scripts/start.sh [--no-wizard]             # free needed host ports (80/443/…), docker compose up -d, then (interactive) a setup wizard
+./scripts/remove-all.sh [-y]                 # DESTRUCTIVE: down -v + delete ./db; asks separately about ./wordpress (-y removes everything)
 ./scripts/reset-state.sh [-y]                # full reset: remove-all.sh then start.sh (fresh core + empty DB)
 ```
 
@@ -89,6 +90,7 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
   `ENV_LOADED=1` on success.
 - `require_vars VAR...` — exit with `❌ Missing required variable` if any named var is empty.
 - `require_db_running` — exit if the `db` container isn't up.
+- `wait_for_db` — block (up to ~60s) until MySQL in the `db` container accepts connections; used by `start.sh`'s wizard before DB-touching steps on first boot.
 - `compose_published_ports` — echo the unique host ports this compose project publishes (parsed from `docker compose config`).
 - `port_in_use PORT` / `free_port PORT` — check whether a TCP port has a listener, and (interactively, default No) offer to stop whatever holds it: a Docker container (Case 1, `docker stop`), or a host process / systemd service (Case 2, `sudo systemctl stop`/`sudo kill`). Used by `start.sh` before `up`.
 
@@ -108,6 +110,14 @@ pre-import alternative but does not handle serialized data. After the DB rewrite
 `wp-config.php` constants (`WP_HOME`, `WP_SITEURL`, `DOMAIN_CURRENT_SITE`) via `wp config set` — so multisite
 no longer needs a manual `DOMAIN_CURRENT_SITE` edit — and finally **reports** (does not edit) any literal
 occurrences of the old domain hard-coded in `wp-content/` source files.
+
+`start.sh` is also the **setup wizard**: after `up -d` it (interactively only — guarded by `[ -t 0 ]`,
+skipped by `--no-wizard`) offers, in order, to (1) run `update-wp-config.sh`, (2) `import-db.sh`,
+(3) `update-db-domains.sh`, calling `wait_for_db` before the DB steps. The order matters: the
+`wpcli` container reads DB creds from the shared `wordpress/wp-config.php` (not just env), so an
+imported site's stale creds must be fixed **before** `update-db-domains.sh`'s wp-cli path can
+connect. `update-wp-config.sh` exists precisely because the official image only generates
+`wp-config.php` when it's missing — an imported `./wordpress` keeps the source host's credentials.
 
 ## Notes
 
