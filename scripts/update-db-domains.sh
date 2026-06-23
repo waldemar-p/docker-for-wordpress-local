@@ -67,10 +67,26 @@ for const in WP_HOME WP_SITEURL DOMAIN_CURRENT_SITE; do
   esac
 done
 
-# Report-only: literal occurrences on disk that wp-cli can't reach (theme/plugin source).
-# These are NOT auto-edited — rewriting source files is risky and out of scope.
+# Literal occurrences on disk that wp-cli can't reach (theme/plugin source, page caches).
 hits="$(docker compose run --rm wpcli sh -c "grep -rIl '$OLD' /var/www/html/wp-content 2>/dev/null" || true)"
 if [ -n "$hits" ]; then
-  echo "⚠️  '$OLD' also appears hard-coded in these files (review/replace manually):"
+  echo "⚠️  '$OLD' also appears hard-coded in these files:"
   echo "$hits" | sed 's/^/   • /'
+
+  # Offer to rewrite them too. Default No (editing source files is riskier than the
+  # DB rewrite). Set REPLACE_FILES=1 to opt in non-interactively.
+  do_replace=0
+  case "${REPLACE_FILES:-}" in 1|yes|true|YES|TRUE) do_replace=1 ;; esac
+  if [ "$do_replace" -eq 0 ] && [ -t 0 ]; then
+    read -r -p "   Replace '$OLD' → '$NEW' in these files too? [y/N] " ans
+    case "$ans" in [yY]|[yY][eE][sS]) do_replace=1 ;; esac
+  fi
+
+  if [ "$do_replace" -eq 1 ]; then
+    echo "$hits" | docker compose run --rm -T -e OLD="$OLD" -e NEW="$NEW" wpcli sh -c \
+      'while IFS= read -r f; do [ -n "$f" ] && sed -i "s|$OLD|$NEW|g" "$f"; done'
+    echo "   ✅ Replaced in $(echo "$hits" | grep -c .) file(s)."
+  else
+    echo "   ↩️  Left unchanged (review/replace manually)."
+  fi
 fi

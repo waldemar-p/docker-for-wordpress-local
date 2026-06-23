@@ -77,7 +77,7 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 ./scripts/update-wp-config.sh                # write .env DB creds/prefix/DB_HOST into an EXISTING wordpress/wp-config.php (for imported sites; no-op on image-generated config)
 ./scripts/scan-wp-files.sh [dir]             # report-only: flag files/folders not part of a standard WP install (default: ./wordpress)
 ./scripts/start.sh [--no-wizard]             # free needed host ports (80/443/…), docker compose up -d, then (interactive) a setup wizard
-./scripts/remove-all.sh [-y]                 # DESTRUCTIVE: down -v + delete ./db; asks separately about ./wordpress (-y removes everything)
+./scripts/remove-all.sh [-y]                 # DESTRUCTIVE: down -v + delete ./db; asks separately about ./wordpress; restarts services start.sh stopped to free ports (-y removes everything)
 ./scripts/reset-state.sh [-y]                # full reset: remove-all.sh then start.sh (fresh core + empty DB)
 ```
 
@@ -92,7 +92,8 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 - `require_db_running` — exit if the `db` container isn't up.
 - `wait_for_db` — block (up to ~60s) until MySQL in the `db` container accepts connections; used by `start.sh`'s wizard before DB-touching steps on first boot.
 - `compose_published_ports` — echo the unique host ports this compose project publishes (parsed from `docker compose config`).
-- `port_in_use PORT` / `free_port PORT` — check whether a TCP port has a listener, and (interactively, default No) offer to stop whatever holds it: a Docker container (Case 1, `docker stop`), or a host process / systemd service (Case 2, `sudo systemctl stop`/`sudo kill`). Used by `start.sh` before `up`.
+- `port_in_use PORT` / `free_port PORT` — check whether a TCP port has a listener, and (interactively, default No) offer to stop whatever holds it: a Docker container (Case 1, `docker stop`), or a host process / systemd service (Case 2, `sudo systemctl stop`/`sudo kill`). Used by `start.sh` before `up`. Whatever it stops, it records the inverse command (`docker start …` / `sudo systemctl start …`) to `record_port_restore`.
+- `record_port_restore CMD` / `$PORT_RESTORE_FILE` (`.restore-ports.sh`, gitignored) — `free_port` appends restart commands here (deduplicated) when it stops something to claim a port; `remove-all.sh` runs this script after `down` to put those ports back as they were, then deletes it. A killed bare process is recorded only as a comment (can't be auto-restarted).
 
 `scan-wp-files.sh` is hybrid and **report-only** (never deletes): Layer 1 is a self-contained
 filesystem scan (whitelist of standard WP root entries flags unknown top-level files, plus
@@ -108,8 +109,9 @@ rewrites serialized data correctly; it falls back to raw SQL `REPLACE` across `$
 only if wp-cli can't run. For a dump from another domain, the raw `sed`-on-`.sql` approach (README) is the
 pre-import alternative but does not handle serialized data. After the DB rewrite it also updates any defined
 `wp-config.php` constants (`WP_HOME`, `WP_SITEURL`, `DOMAIN_CURRENT_SITE`) via `wp config set` — so multisite
-no longer needs a manual `DOMAIN_CURRENT_SITE` edit — and finally **reports** (does not edit) any literal
-occurrences of the old domain hard-coded in `wp-content/` source files.
+no longer needs a manual `DOMAIN_CURRENT_SITE` edit — and finally reports any literal occurrences of the old
+domain hard-coded in `wp-content/` source files, then offers to rewrite them in place too (default No, or
+`REPLACE_FILES=1` to opt in non-interactively; the wizard's interactive run gets the prompt).
 
 `start.sh` is also the **setup wizard**: after `up -d` it (interactively only — guarded by `[ -t 0 ]`,
 skipped by `--no-wizard`) offers, in order, to (1) run `update-wp-config.sh`, (2) `import-db.sh`,

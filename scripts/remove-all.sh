@@ -42,3 +42,22 @@ else
   docker run --rm -v "$(pwd):/work" alpine sh -c 'rm -rf /work/db'
   echo "✅ Removed containers, volumes and ./db. Kept ./wordpress."
 fi
+
+# If start.sh stopped other services to claim host ports, our stack is down now so
+# those ports are free again — restart whatever was stopped (recorded by free_port).
+if [ -f "$PORT_RESTORE_FILE" ]; then
+  echo
+  echo "🔌 These services were stopped earlier to free host ports:"
+  grep -v '^#' "$PORT_RESTORE_FILE" | sed 's/^/   • /'
+  run_restore=1
+  if [ "$ASSUME_YES" -ne 1 ]; then
+    read -r -p "Restart them now? [Y/n] " r
+    case "$r" in [nN]|[nN][oO]) run_restore=0 ;; esac
+  fi
+  if [ "$run_restore" -eq 1 ]; then
+    bash "$PORT_RESTORE_FILE" && rm -f "$PORT_RESTORE_FILE" \
+      && echo "✅ Restarted previously-stopped services."
+  else
+    echo "↩️  Left them stopped. Run '$PORT_RESTORE_FILE' yourself later, or delete it."
+  fi
+fi

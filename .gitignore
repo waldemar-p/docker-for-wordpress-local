@@ -3,3 +3,4 @@
 db
 db*.sql
 wordpress
+.restore-ports.sh
