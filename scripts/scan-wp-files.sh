@@ -5,9 +5,11 @@ set -e
 # a standard WordPress install (cruft, leftover dumps, editor junk, injected PHP).
 # Usage: ./scripts/scan-wp-files.sh [dir]   (run from the project root; dir defaults to ./wordpress)
 #
-# Report only — nothing is ever deleted or moved.
-# Layer 1 (always): filesystem heuristics — unknown root entries + suspicious patterns.
-# Layer 2 (optional): `wp core verify-checksums` via wp-cli, when the containers are up.
+# Nothing is ever deleted or moved.
+# Layer 0 (FATAL): structural completeness gate — if core is missing/incomplete, report
+#   what's missing and exit non-zero (so a caller like start.sh can abort + tear down).
+# Layer 1 (report): filesystem heuristics — unknown root entries + suspicious patterns.
+# Layer 2 (report): `wp core verify-checksums` via wp-cli, when the containers are up.
 
 WP_DIR="${1:-wordpress}"
 
@@ -16,11 +18,16 @@ if [ ! -d "$WP_DIR" ]; then
   exit 1
 fi
 
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 # Load .env (only needed to enable the optional wp-cli layer) — soft guard.
 load_env soft
+
+# --- Layer 0: structural completeness gate (FATAL) -----------------------------
+# A complete core is a precondition for everything below; abort here on failure so
+# callers (start.sh) can tear the stack down rather than scan a broken install.
+check_wp_complete "$WP_DIR" || exit 1
 
 declare -A FLAGGED                  # relative path -> 1 (dedups items flagged twice)
 

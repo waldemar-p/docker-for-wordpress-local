@@ -7,6 +7,7 @@
 #   mode = "hard" (default): exit 1 with an error if .env is missing.
 #   mode = "soft": set ENV_LOADED=0 and return 0 if .env is missing
 #                  (ENV_LOADED=1 when it was loaded).
+# shellcheck disable=SC2034,SC2120  # ENV_LOADED is read by callers; the mode arg is optional
 load_env() {
   local mode="${1:-hard}"
 
@@ -55,8 +56,7 @@ require_db_running() {
 # Returns 0 once ready, 1 on timeout. Useful right after `up` on first boot,
 # when MySQL is still initialising.
 wait_for_db() {
-  local i
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     if docker compose exec -T db sh -c \
          'exec mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --silent' >/dev/null 2>&1; then
       return 0
@@ -73,30 +73,43 @@ wpcli_user() {
   [ -d wordpress ] && stat -c '%u:%g' wordpress 2>/dev/null || echo "33:33"
 }
 
-# Ensure WordPress core exists in ./wordpress before any wp-cli/DB step. The official
-# image only copies core when the volume has neither index.php nor wp-includes/version.php,
-# so an imported wp-content (with its own index.php) leaves core missing — wp-cli then
-# reports "not a WordPress installation" and the browser 500s. Poll briefly first to ride
-# out the image's first-boot copy; only if core is still absent, offer to download it
-# (keeping wp-content). Interactive default Yes; non-interactive auto-downloads.
-# ponytail: pulls LATEST core (backup's version unknown; WP upgrades the DB on next admin
-#   load); a >30s first-boot copy could re-trigger this, harmless (--force just re-fetches).
-ensure_wp_core() {
-  local i
-  for i in $(seq 1 15); do
-    [ -f wordpress/wp-load.php ] && return 0
-    sleep 2
+# Block until php-fpm is accepting connections inside the wordpress container. The
+# official image's entrypoint copies core (if needed) and THEN execs php-fpm, so a
+# listening :9000 is the deterministic "image finished its setup" signal — no arbitrary
+# sleep. Returns 0 once ready, 1 on the failsafe timeout.
+# ponytail: bash /dev/tcp probe (the wordpress image is Debian, has bash); the 60×1s is a
+#   failsafe for a container that never comes up, not a fixed delay.
+wait_for_wp_ready() {
+  docker compose exec -T wordpress bash -c \
+    'for i in $(seq 1 60); do (exec 3<>/dev/tcp/127.0.0.1/9000) 2>/dev/null && exit 0; sleep 1; done; exit 1'
+}
+
+# Carefully verify ./wordpress is a COMPLETE WordPress install before any wp-cli/DB step.
+# Read-only: never downloads or modifies anything (we assume the supplied files should be
+# complete and only check to be sure). Waits for the image to finish first, then checks
+# the core bootstrap files plus the wp-admin/wp-includes dirs from the inside (so a missing
+# or partial core dir is caught, not just version.php). On any miss, prints what's missing
+# and returns 1; returns 0 when all present. wp-config.php is intentionally NOT required —
+# the official image generates it, so requiring it would false-fail a fresh install.
+check_wp_complete() {
+  local dir="${1:-wordpress}"
+  wait_for_wp_ready || echo "⚠️  wordpress container not ready — checking files anyway."
+
+  local entry missing=""
+  for entry in index.php wp-load.php wp-settings.php wp-blog-header.php \
+               wp-admin wp-admin/index.php \
+               wp-includes wp-includes/version.php wp-includes/functions.php \
+               wp-content; do
+    [ -e "$dir/$entry" ] || missing="$missing $entry"
   done
 
-  echo "⚠️  WordPress core is missing from ./wordpress (no wp-load.php)."
-  echo "    The official image skipped its core copy because ./wordpress already had files."
-  local ans=Y
-  [ -t 0 ] && read -r -p "    Download core now (keeps your wp-content)? [Y/n] " ans
-  case "$ans" in
-    [nN]|[nN][oO]) echo "    ↩️  Left as-is — wp-cli and the site will fail until core exists."; return 1 ;;
-  esac
-  docker compose run --rm --user "$(wpcli_user)" wpcli wp core download --skip-content --force \
-    && echo "    ✅ Core downloaded."
+  [ -z "$missing" ] && return 0
+
+  echo "❌ '$dir' is not a complete WordPress install."
+  echo "   Missing:${missing}"
+  echo "   Supply the files complete — the official image won't restore core when index.php"
+  echo "   already exists, and these scripts never download WordPress."
+  return 1
 }
 
 # Echo the unique host ports this compose project publishes (one per line).

@@ -91,17 +91,22 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 - `require_vars VAR...` — exit with `❌ Missing required variable` if any named var is empty.
 - `require_db_running` — exit if the `db` container isn't up.
 - `wait_for_db` — block (up to ~60s) until MySQL in the `db` container accepts connections; used by `start.sh`'s wizard before DB-touching steps on first boot.
-- `wpcli_user` — echo the `uid:gid` that owns `./wordpress` (fallback `33:33`). The `wordpress:cli` image's default `www-data` differs from the Debian `wordpress:php8.2-fpm` image's, so a one-off `wpcli` container can't *write* into the bind mount; writing calls add `--user "$(wpcli_user)"` so created/edited files match the tree's owner (used by `ensure_wp_core` and `update-db-domains.sh`'s `wp config set` / file-rewrite).
-- `ensure_wp_core` — poll up to ~30s for `wordpress/wp-load.php`; if still absent, the official image skipped its core copy (an imported `./wordpress` shipping `index.php`/`wp-content` but no core), so offer `wp core download --skip-content --force` (keeps `wp-content`). Interactive default Yes, non-interactive auto-downloads. Called by `start.sh` right after `up -d` and by `update-db-domains.sh`, since missing core makes wp-cli fail and the browser 500.
+- `wpcli_user` — echo the `uid:gid` that owns `./wordpress` (fallback `33:33`). The `wordpress:cli` image's default `www-data` differs from the Debian `wordpress:php8.2-fpm` image's, so a one-off `wpcli` container can't *write* into the bind mount; writing calls add `--user "$(wpcli_user)"` so created/edited files match the tree's owner (used by `update-db-domains.sh`'s `wp config set` / file-rewrite).
+- `wait_for_wp_ready` — block until php-fpm accepts connections inside the `wordpress` container. The official image's entrypoint copies core (when needed) and *then* execs php-fpm, so a listening `:9000` is the deterministic "image finished setup" signal (no arbitrary sleep). Probes via bash `/dev/tcp`; a 60×1s loop is only a failsafe.
+- `check_wp_complete [dir]` — **read-only** structural completeness check (never downloads or modifies; `dir` defaults to `wordpress`): after `wait_for_wp_ready`, verify the tree holds a complete core — the root bootstrap files plus `wp-admin/` and `wp-includes/` core files (`version.php`, `functions.php`, `wp-admin/index.php`), not just `version.php`. The markers are WordPress's own (`wp-includes/version.php` is what the official image's entrypoint and wp-cli both key on), not an arbitrary list. `wp-config.php` is excluded (the image generates it). On any miss it prints exactly what's missing and returns non-zero. It is **Layer 0 of `scan-wp-files.sh`** (the unified file-verification step `start.sh` runs after `up -d`) and is also called directly by `update-db-domains.sh` before the DB steps. We assume the supplied install should be complete and only verify it — the official image won't restore core when `index.php` is already present, and the scripts never fetch WordPress.
 - `compose_published_ports` — echo the unique host ports this compose project publishes (parsed from `docker compose config`).
 - `port_in_use PORT` / `free_port PORT` — check whether a TCP port has a listener, and (interactively, default No) offer to stop whatever holds it: a Docker container (Case 1, `docker stop`), or a host process / systemd service (Case 2, `sudo systemctl stop`/`sudo kill`). Used by `start.sh` before `up`. Whatever it stops, it records the inverse command (`docker start …` / `sudo systemctl start …`) to `record_port_restore`.
 - `record_port_restore CMD` / `$PORT_RESTORE_FILE` (`.restore-ports.sh`, gitignored) — `free_port` appends restart commands here (deduplicated) when it stops something to claim a port; `remove-all.sh` runs this script after `down` to put those ports back as they were, then deletes it. A killed bare process is recorded only as a comment (can't be auto-restarted).
 
-`scan-wp-files.sh` is hybrid and **report-only** (never deletes): Layer 1 is a self-contained
-filesystem scan (whitelist of standard WP root entries flags unknown top-level files, plus
-suspicious-pattern rules — PHP inside `wp-content/uploads/`, archives/`.sql` dumps, editor/VCS
-junk); Layer 2 runs `docker compose run --rm wpcli wp core verify-checksums` when the `wordpress`
-container is up, and is silently skipped otherwise. A lone `wp-config-sample.php` checksum
+`scan-wp-files.sh` is the **unified file-verification step** (`start.sh` runs it after `up -d`; also
+runnable standalone). It never deletes. **Layer 0 (fatal)** is the structural gate `check_wp_complete`
+— if core is missing/incomplete it reports what's missing and exits non-zero, so `start.sh` can abort
+and `docker compose down`. If Layer 0 passes, the report-only layers run: **Layer 1** is a
+self-contained filesystem scan (whitelist of standard WP root entries flags unknown top-level files,
+plus suspicious-pattern rules — PHP inside `wp-content/uploads/`, archives/`.sql` dumps, editor/VCS
+junk); **Layer 2** runs `docker compose run --rm wpcli wp core verify-checksums` (WordPress's own
+per-file integrity check — catches *modified* core files Layer 0's presence check can't) when the
+`wordpress` container is up, and is silently skipped otherwise. A lone `wp-config-sample.php` checksum
 mismatch (and the resulting "doesn't verify against checksums" error) is **expected** — the
 official WordPress Docker image ships a slightly modified sample file; the script prints a note
 saying so. Only mismatches under `wp-admin/`/`wp-includes/` or unexpected extra files matter.
@@ -115,8 +120,10 @@ no longer needs a manual `DOMAIN_CURRENT_SITE` edit — and finally reports any 
 domain hard-coded in `wp-content/` source files, then offers to rewrite them in place too (default No, or
 `REPLACE_FILES=1` to opt in non-interactively; the wizard's interactive run gets the prompt).
 
-`start.sh` runs `ensure_wp_core` right after `up -d` (unconditionally — missing core breaks the
-browser, not just the wizard). It is also the **setup wizard**: after `up -d` it (interactively only — guarded by `[ -t 0 ]`,
+`start.sh` runs `scan-wp-files.sh` right after `up -d` (unconditionally — an incomplete core breaks
+the browser, not just the wizard): its Layer 0 gate aborts on incomplete core, in which case
+`start.sh` `docker compose down`s and exits; otherwise Layers 1–2 report cruft / modified core. It is also the
+**setup wizard**: after `up -d` it (interactively only — guarded by `[ -t 0 ]`,
 skipped by `--no-wizard`) offers, in order, to (1) run `update-wp-config.sh`, (2) `import-db.sh`,
 (3) `update-db-domains.sh`, calling `wait_for_db` before the DB steps. The order matters: the
 `wpcli` container reads DB creds from the shared `wordpress/wp-config.php` (not just env), so an

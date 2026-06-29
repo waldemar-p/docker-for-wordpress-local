@@ -6,7 +6,7 @@ set -e
 
 FILE="${1:-db.sql}"
 
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 # Load environment variables from .env file

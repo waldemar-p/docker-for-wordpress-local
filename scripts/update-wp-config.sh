@@ -10,7 +10,7 @@ set -e
 # environment) the replacements simply don't match — so this is a safe no-op there.
 # Usage: ./scripts/update-wp-config.sh   (run from the project root)
 
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 load_env

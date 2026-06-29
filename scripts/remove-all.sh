@@ -6,7 +6,7 @@ set -e
 # default). DESTRUCTIVE. Usage: ./scripts/remove-all.sh [-y]   (project root)
 #   -y / --yes : skip all prompts and remove EVERYTHING, including ./wordpress.
 
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 # .env is optional here — only used to name the project in the output.
@@ -19,6 +19,7 @@ REMOVE_WP=0
 if [ "$ASSUME_YES" -eq 1 ]; then
   REMOVE_WP=1
 else
+  # shellcheck disable=SC2016  # $PROJECT_NAME expands; the single quotes are literal output
   echo "⚠️  This will DELETE state for this project${PROJECT_NAME:+ '$PROJECT_NAME'}:"
   echo "    • containers + named volumes (docker compose down -v)"
   echo "    • the database directory ./db"

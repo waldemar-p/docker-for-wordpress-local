@@ -8,7 +8,7 @@ set -e
 # Primary path uses wp-cli (serialized-data safe). If wp-cli can't run
 # (e.g. WordPress core/files not present), it falls back to a raw SQL REPLACE.
 
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 # Load environment variables from .env file
@@ -29,8 +29,8 @@ fi
 # Check the db container is running
 require_db_running
 
-# Make sure WordPress core is present, else wp-cli can't run (raw-SQL fallback only).
-ensure_wp_core || true
+# The provided WordPress files must be complete or wp-cli can't run. Check only; abort if not.
+check_wp_complete || exit 1
 
 PREFIX="$WORDPRESS_TABLE_PREFIX"
 
@@ -74,6 +74,7 @@ done
 hits="$(docker compose run --rm wpcli sh -c "grep -rIl '$OLD' /var/www/html/wp-content 2>/dev/null" || true)"
 if [ -n "$hits" ]; then
   echo "⚠️  '$OLD' also appears hard-coded in these files:"
+  # shellcheck disable=SC2001  # per-line prefix on multi-line $hits — sed is clearest here
   echo "$hits" | sed 's/^/   • /'
 
   # Offer to rewrite them too. Default No (editing source files is riskier than the

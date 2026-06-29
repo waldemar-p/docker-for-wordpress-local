@@ -5,7 +5,7 @@ set -e
 # for the optional one-time steps (fix wp-config creds / import a DB / rewrite the
 # site domain). Usage: ./scripts/start.sh [--no-wizard]   (run from project root)
 
-# shellcheck source=lib.sh
+# shellcheck source-path=SCRIPTDIR source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 # .env is optional here — used for the SITE_HOST hint and the wizard's DB steps.
@@ -22,9 +22,14 @@ done
 echo "🚀 Starting containers ..."
 docker compose up -d
 
-# An imported ./wordpress without core makes the image skip its copy → wp-cli and the
-# browser both fail. Detect it now (rides out the first-boot copy) and offer to download.
-ensure_wp_core || true
+# Verify the provided WordPress files in one step (scan-wp-files.sh): Layer 0 aborts if
+# core is incomplete; Layers 1–2 then report files that don't belong or look edited
+# (checksums). We only check — never download or modify. Abort + tear down on Layer 0.
+if ! "$(dirname "$0")/scan-wp-files.sh"; then
+  echo "🛑 Core is incomplete — aborting and bringing the stack down ..."
+  docker compose down
+  exit 1
+fi
 
 echo "📋 Current state:"
 docker compose ps
