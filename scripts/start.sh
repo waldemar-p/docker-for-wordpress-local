@@ -22,6 +22,10 @@ done
 echo "🚀 Starting containers ..."
 docker compose up -d
 
+# An imported ./wordpress without core makes the image skip its copy → wp-cli and the
+# browser both fail. Detect it now (rides out the first-boot copy) and offer to download.
+ensure_wp_core || true
+
 echo "📋 Current state:"
 docker compose ps
 

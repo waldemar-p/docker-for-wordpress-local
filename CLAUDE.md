@@ -91,6 +91,8 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 - `require_vars VAR...` — exit with `❌ Missing required variable` if any named var is empty.
 - `require_db_running` — exit if the `db` container isn't up.
 - `wait_for_db` — block (up to ~60s) until MySQL in the `db` container accepts connections; used by `start.sh`'s wizard before DB-touching steps on first boot.
+- `wpcli_user` — echo the `uid:gid` that owns `./wordpress` (fallback `33:33`). The `wordpress:cli` image's default `www-data` differs from the Debian `wordpress:php8.2-fpm` image's, so a one-off `wpcli` container can't *write* into the bind mount; writing calls add `--user "$(wpcli_user)"` so created/edited files match the tree's owner (used by `ensure_wp_core` and `update-db-domains.sh`'s `wp config set` / file-rewrite).
+- `ensure_wp_core` — poll up to ~30s for `wordpress/wp-load.php`; if still absent, the official image skipped its core copy (an imported `./wordpress` shipping `index.php`/`wp-content` but no core), so offer `wp core download --skip-content --force` (keeps `wp-content`). Interactive default Yes, non-interactive auto-downloads. Called by `start.sh` right after `up -d` and by `update-db-domains.sh`, since missing core makes wp-cli fail and the browser 500.
 - `compose_published_ports` — echo the unique host ports this compose project publishes (parsed from `docker compose config`).
 - `port_in_use PORT` / `free_port PORT` — check whether a TCP port has a listener, and (interactively, default No) offer to stop whatever holds it: a Docker container (Case 1, `docker stop`), or a host process / systemd service (Case 2, `sudo systemctl stop`/`sudo kill`). Used by `start.sh` before `up`. Whatever it stops, it records the inverse command (`docker start …` / `sudo systemctl start …`) to `record_port_restore`.
 - `record_port_restore CMD` / `$PORT_RESTORE_FILE` (`.restore-ports.sh`, gitignored) — `free_port` appends restart commands here (deduplicated) when it stops something to claim a port; `remove-all.sh` runs this script after `down` to put those ports back as they were, then deletes it. A killed bare process is recorded only as a comment (can't be auto-restarted).
@@ -113,7 +115,8 @@ no longer needs a manual `DOMAIN_CURRENT_SITE` edit — and finally reports any 
 domain hard-coded in `wp-content/` source files, then offers to rewrite them in place too (default No, or
 `REPLACE_FILES=1` to opt in non-interactively; the wizard's interactive run gets the prompt).
 
-`start.sh` is also the **setup wizard**: after `up -d` it (interactively only — guarded by `[ -t 0 ]`,
+`start.sh` runs `ensure_wp_core` right after `up -d` (unconditionally — missing core breaks the
+browser, not just the wizard). It is also the **setup wizard**: after `up -d` it (interactively only — guarded by `[ -t 0 ]`,
 skipped by `--no-wizard`) offers, in order, to (1) run `update-wp-config.sh`, (2) `import-db.sh`,
 (3) `update-db-domains.sh`, calling `wait_for_db` before the DB steps. The order matters: the
 `wpcli` container reads DB creds from the shared `wordpress/wp-config.php` (not just env), so an

@@ -29,6 +29,9 @@ fi
 # Check the db container is running
 require_db_running
 
+# Make sure WordPress core is present, else wp-cli can't run (raw-SQL fallback only).
+ensure_wp_core || true
+
 PREFIX="$WORDPRESS_TABLE_PREFIX"
 
 raw_sql_fallback() {
@@ -50,7 +53,7 @@ if docker compose run --rm wpcli \
      wp search-replace "$OLD" "$NEW" --all-tables --skip-columns=guid; then
   echo "✅ wp-cli search-replace complete."
 else
-  echo "⚠️  wp-cli search-replace failed (WordPress core may not be installed)."
+  echo "⚠️  wp-cli ran but found no WordPress install at /var/www/html (core missing)."
   raw_sql_fallback
 fi
 
@@ -61,7 +64,7 @@ for const in WP_HOME WP_SITEURL DOMAIN_CURRENT_SITE; do
   cur="$(docker compose run --rm wpcli wp config get "$const" 2>/dev/null)" || continue
   case "$cur" in
     *"$OLD"*)
-      docker compose run --rm wpcli wp config set "$const" "${cur//$OLD/$NEW}"
+      docker compose run --rm --user "$(wpcli_user)" wpcli wp config set "$const" "${cur//$OLD/$NEW}"
       echo "   • $const updated"
       ;;
   esac
@@ -83,7 +86,7 @@ if [ -n "$hits" ]; then
   fi
 
   if [ "$do_replace" -eq 1 ]; then
-    echo "$hits" | docker compose run --rm -T -e OLD="$OLD" -e NEW="$NEW" wpcli sh -c \
+    echo "$hits" | docker compose run --rm -T --user "$(wpcli_user)" -e OLD="$OLD" -e NEW="$NEW" wpcli sh -c \
       'while IFS= read -r f; do [ -n "$f" ] && sed -i "s|$OLD|$NEW|g" "$f"; done'
     echo "   ✅ Replaced in $(echo "$hits" | grep -c .) file(s)."
   else

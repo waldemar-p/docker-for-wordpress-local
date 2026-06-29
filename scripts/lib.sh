@@ -66,6 +66,39 @@ wait_for_db() {
   return 1
 }
 
+# uid:gid that owns ./wordpress, so a one-off wpcli container (whose default
+# www-data differs from the php-fpm image's) can WRITE into the bind mount.
+# ponytail: assumes a non-root owner; a root-owned tree would need --allow-root. GNU stat (Linux host).
+wpcli_user() {
+  [ -d wordpress ] && stat -c '%u:%g' wordpress 2>/dev/null || echo "33:33"
+}
+
+# Ensure WordPress core exists in ./wordpress before any wp-cli/DB step. The official
+# image only copies core when the volume has neither index.php nor wp-includes/version.php,
+# so an imported wp-content (with its own index.php) leaves core missing — wp-cli then
+# reports "not a WordPress installation" and the browser 500s. Poll briefly first to ride
+# out the image's first-boot copy; only if core is still absent, offer to download it
+# (keeping wp-content). Interactive default Yes; non-interactive auto-downloads.
+# ponytail: pulls LATEST core (backup's version unknown; WP upgrades the DB on next admin
+#   load); a >30s first-boot copy could re-trigger this, harmless (--force just re-fetches).
+ensure_wp_core() {
+  local i
+  for i in $(seq 1 15); do
+    [ -f wordpress/wp-load.php ] && return 0
+    sleep 2
+  done
+
+  echo "⚠️  WordPress core is missing from ./wordpress (no wp-load.php)."
+  echo "    The official image skipped its core copy because ./wordpress already had files."
+  local ans=Y
+  [ -t 0 ] && read -r -p "    Download core now (keeps your wp-content)? [Y/n] " ans
+  case "$ans" in
+    [nN]|[nN][oO]) echo "    ↩️  Left as-is — wp-cli and the site will fail until core exists."; return 1 ;;
+  esac
+  docker compose run --rm --user "$(wpcli_user)" wpcli wp core download --skip-content --force \
+    && echo "    ✅ Core downloaded."
+}
+
 # Echo the unique host ports this compose project publishes (one per line).
 compose_published_ports() {
   docker compose config 2>/dev/null \
