@@ -2,6 +2,10 @@ services:
   wordpress:
     image: wordpress:php8.2-fpm
     container_name: ${PROJECT_NAME}_wp
+    # Run PHP-FPM as the user that owns the bind-mounted ./wordpress so it can WRITE
+    # it (uploads, cache, wp-config). start.sh sets WP_USER to that owner; default
+    # 33:33 (the image's www-data) keeps stock behavior for a plain `docker compose up`.
+    user: "${WP_USER:-33:33}"
     depends_on:
       - db
     environment:

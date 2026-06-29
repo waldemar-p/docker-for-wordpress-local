@@ -29,7 +29,8 @@ Three containers (plus a one-off wp-cli runner), all driven by `.env`:
 
 - **`wordpress`** — `wordpress:php8.2-fpm`. PHP-FPM only, on port 9000. The official image
   **auto-generates `wordpress/wp-config.php`** from the `WORDPRESS_*` env vars on first boot — no
-  manual credential step.
+  manual credential step. Runs as the user that owns `./wordpress` (set by `start.sh`, or `WP_USER`
+  in `.env`) so PHP can write the bind mount — uploads, cache, and plugins that edit `wp-config.php`.
 - **`caddy`** — `caddy:2`, the web server. Serves static files, proxies PHP via FastCGI to
   `wordpress:9000`, and terminates **automatic local HTTPS**. Listens on host ports **80** and **443**.
 - **`db`** — `mysql:5.7`, on host `3306`.

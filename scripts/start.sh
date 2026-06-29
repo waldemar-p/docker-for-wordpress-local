@@ -19,6 +19,17 @@ for port in $(compose_published_ports); do
   free_port "$port"
 done
 
+# Run PHP-FPM as whoever owns ./wordpress so it can write the bind mount (uploads,
+# cache, wp-config — else plugins like WP Super Cache fail to update wp-config.php).
+# Ensure the folder exists first (so a fresh tree is owned by this host user, not root
+# from docker's auto-create). .env's WP_USER wins if set.
+mkdir -p wordpress
+if [ -z "${WP_USER:-}" ]; then
+  WP_USER="$(stat -c '%u:%g' wordpress)"
+  export WP_USER
+fi
+echo "👤 PHP-FPM will run as ${WP_USER}."
+
 echo "🚀 Starting containers ..."
 docker compose up -d
 

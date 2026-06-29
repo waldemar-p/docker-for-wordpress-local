@@ -17,6 +17,12 @@ variables from `.env`:
 - **`wordpress`** — `wordpress:php8.2-fpm`. PHP-FPM only (no web server), listening on port 9000.
   Talks to `db:3306`. The official image **auto-generates `wordpress/wp-config.php`** on first boot
   from the `WORDPRESS_*` environment variables, so there is no manual credential-injection step.
+  Runs as **`user: "${WP_USER:-33:33}"`** so PHP-FPM can *write* the bind-mounted `./wordpress`
+  (uploads, cache, plugins editing `wp-config.php` such as WP Super Cache). `start.sh` sets `WP_USER`
+  to the uid:gid that owns `./wordpress`; the official image's entrypoint supports running as a
+  non-root user. The default `33:33` (the image's `www-data`) applies only to a bare
+  `docker compose up` — and won't be writable by a host-owned tree, so prefer `start.sh` or set
+  `WP_USER` in `.env`.
 - **`caddy`** — `caddy:2`, the web server, exposed on host **`80`** and **`443`**. Serves static
   files from the shared `./wordpress` mount, proxies `*.php` to `wordpress:9000` via FastCGI
   (`php_fastcgi`), and provides **automatic local HTTPS** via its own internal CA. Config is
