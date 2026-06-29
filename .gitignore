@@ -4,3 +4,4 @@ db
 db*.sql
 wordpress
 .restore-ports.sh
+wp-scan-report.txt

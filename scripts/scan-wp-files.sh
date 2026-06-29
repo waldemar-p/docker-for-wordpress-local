@@ -10,8 +10,21 @@ set -e
 #   what's missing and exit non-zero (so a caller like start.sh can abort + tear down).
 # Layer 1 (report): filesystem heuristics — unknown root entries + suspicious patterns.
 # Layer 2 (report): `wp core verify-checksums` via wp-cli, when the containers are up.
+# The full output is also written to a report file (WP_SCAN_REPORT, default
+# ./wp-scan-report.txt) via tee.
 
 WP_DIR="${1:-wordpress}"
+
+# Mirror the whole run (incl. the docker checksum output) to a report file and the
+# terminal. Re-exec once through tee; PIPESTATUS propagates the real exit code so a
+# caller (start.sh) still sees a Layer 0 abort.
+REPORT="${WP_SCAN_REPORT:-wp-scan-report.txt}"
+if [ -z "${SCAN_TEEING:-}" ]; then
+  SCAN_TEEING=1 "$0" "$@" 2>&1 | tee "$REPORT"
+  rc="${PIPESTATUS[0]}"
+  echo "📄 Scan report saved to $REPORT"
+  exit "$rc"
+fi
 
 if [ ! -d "$WP_DIR" ]; then
   echo "❌ WordPress folder '$WP_DIR' not found. Run 'docker compose up -d' first."

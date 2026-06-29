@@ -109,7 +109,10 @@ per-file integrity check — catches *modified* core files Layer 0's presence ch
 `wordpress` container is up, and is silently skipped otherwise. A lone `wp-config-sample.php` checksum
 mismatch (and the resulting "doesn't verify against checksums" error) is **expected** — the
 official WordPress Docker image ships a slightly modified sample file; the script prints a note
-saying so. Only mismatches under `wp-admin/`/`wp-includes/` or unexpected extra files matter.
+saying so. Only mismatches under `wp-admin/`/`wp-includes/` or unexpected extra files matter. The
+whole run is mirrored to a report file (`WP_SCAN_REPORT`, default `./wp-scan-report.txt`, gitignored)
+via `tee` — done by a one-time self re-exec so the docker checksum output is captured too, with
+`PIPESTATUS` propagating the real exit code so the Layer 0 abort still reaches `start.sh`.
 
 `update-db-domains.sh` prefers wp-cli (`docker compose run --rm wpcli wp search-replace ...`) because it
 rewrites serialized data correctly; it falls back to raw SQL `REPLACE` across `${prefix}options/posts/postmeta`
