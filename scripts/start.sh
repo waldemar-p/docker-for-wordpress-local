@@ -59,7 +59,7 @@ DIR="$(dirname "$0")"
 # 1) Fix wp-config.php DB credentials — needed when you brought your own ./wordpress.
 if [ -f wordpress/wp-config.php ]; then
   read -r -p "  → Update wp-config.php DB credentials from .env? [y/N] " a
-  case "$a" in [yY]|[yY][eE][sS]) "$DIR/update-wp-config.sh" ;; esac
+  case "$a" in [yY]|[yY][eE][sS]) "$DIR/update-wp-config.sh" || echo "     ❌ update-wp-config.sh failed — skipped." ;; esac
 fi
 
 # 2) Import a database dump (waits for MySQL to be ready first).
@@ -69,7 +69,7 @@ case "$a" in
     read -r -p "     SQL file [db.sql]: " f
     echo "     ⏳ Waiting for the database ..."
     if wait_for_db; then
-      "$DIR/import-db.sh" "${f:-db.sql}"
+      "$DIR/import-db.sh" "${f:-db.sql}" || echo "     ❌ Import failed — skipped."
     else
       echo "     ❌ Database not ready — skipped. Run ./scripts/import-db.sh later."
     fi
@@ -84,7 +84,7 @@ case "$a" in
     if [ -z "$old" ]; then
       echo "     ↩️  No old domain given — skipped."
     elif wait_for_db; then
-      "$DIR/update-db-domains.sh" "$old"
+      "$DIR/update-db-domains.sh" "$old" || echo "     ❌ Domain rewrite failed — skipped."
     else
       echo "     ❌ Database not ready — skipped. Run ./scripts/update-db-domains.sh later."
     fi

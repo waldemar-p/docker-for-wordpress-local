@@ -22,7 +22,9 @@ variables from `.env`:
   to the uid:gid that owns `./wordpress`; the official image's entrypoint supports running as a
   non-root user. The default `33:33` (the image's `www-data`) applies only to a bare
   `docker compose up` — and won't be writable by a host-owned tree, so prefer `start.sh` or set
-  `WP_USER` in `.env`.
+  `WP_USER` in `.env`. PHP upload/memory limits (`upload_max_filesize`, `post_max_size`,
+  `memory_limit`) are set via `./php/uploads.ini`, bind-mounted read-only to
+  `/usr/local/etc/php/conf.d/uploads.ini`.
 - **`caddy`** — `caddy:2`, the web server, exposed on host **`80`** and **`443`**. Serves static
   files from the shared `./wordpress` mount, proxies `*.php` to `wordpress:9000` via FastCGI
   (`php_fastcgi`), and provides **automatic local HTTPS** via its own internal CA. Config is
@@ -99,7 +101,7 @@ Helper scripts (all in `scripts/`, same style — emoji status output) source sh
 - `wait_for_db` — block (up to ~60s) until MySQL in the `db` container accepts connections; used by `start.sh`'s wizard before DB-touching steps on first boot.
 - `wpcli_user` — echo the `uid:gid` that owns `./wordpress` (fallback `33:33`). The `wordpress:cli` image's default `www-data` differs from the Debian `wordpress:php8.2-fpm` image's, so a one-off `wpcli` container can't *write* into the bind mount; writing calls add `--user "$(wpcli_user)"` so created/edited files match the tree's owner (used by `update-db-domains.sh`'s `wp config set` / file-rewrite).
 - `wait_for_wp_ready` — block until php-fpm accepts connections inside the `wordpress` container. The official image's entrypoint copies core (when needed) and *then* execs php-fpm, so a listening `:9000` is the deterministic "image finished setup" signal (no arbitrary sleep). Probes via bash `/dev/tcp`; a 60×1s loop is only a failsafe.
-- `check_wp_complete [dir]` — **read-only** structural completeness check (never downloads or modifies; `dir` defaults to `wordpress`): after `wait_for_wp_ready`, verify the tree holds a complete core — the root bootstrap files plus `wp-admin/` and `wp-includes/` core files (`version.php`, `functions.php`, `wp-admin/index.php`), not just `version.php`. The markers are WordPress's own (`wp-includes/version.php` is what the official image's entrypoint and wp-cli both key on), not an arbitrary list. `wp-config.php` is excluded (the image generates it). On any miss it prints exactly what's missing and returns non-zero. It is **Layer 0 of `scan-wp-files.sh`** (the unified file-verification step `start.sh` runs after `up -d`) and is also called directly by `update-db-domains.sh` before the DB steps. We assume the supplied install should be complete and only verify it — the official image won't restore core when `index.php` is already present, and the scripts never fetch WordPress.
+- `check_wp_complete [dir]` — **read-only** structural completeness check (never downloads or modifies; `dir` defaults to `wordpress`): after `wait_for_wp_ready`, verify the tree holds a complete core — the root bootstrap files, the `wp-content/` directory, and `wp-admin/`/`wp-includes/` core files (`version.php`, `functions.php`, `wp-admin/index.php`), not just `version.php`. The markers are WordPress's own (`wp-includes/version.php` is what the official image's entrypoint and wp-cli both key on), not an arbitrary list. `wp-config.php` is excluded (the image generates it). On any miss it prints exactly what's missing and returns non-zero. It is **Layer 0 of `scan-wp-files.sh`** (the unified file-verification step `start.sh` runs after `up -d`) and is also called directly by `update-db-domains.sh` before the DB steps. We assume the supplied install should be complete and only verify it — the official image won't restore core when `index.php` is already present, and the scripts never fetch WordPress.
 - `compose_published_ports` — echo the unique host ports this compose project publishes (parsed from `docker compose config`).
 - `port_in_use PORT` / `free_port PORT` — check whether a TCP port has a listener, and (interactively, default No) offer to stop whatever holds it: a Docker container (Case 1, `docker stop`), or a host process / systemd service (Case 2, `sudo systemctl stop`/`sudo kill`). Used by `start.sh` before `up`. Whatever it stops, it records the inverse command (`docker start …` / `sudo systemctl start …`) to `record_port_restore`.
 - `record_port_restore CMD` / `$PORT_RESTORE_FILE` (`.restore-ports.sh`, gitignored) — `free_port` appends restart commands here (deduplicated) when it stops something to claim a port; `remove-all.sh` runs this script after `down` to put those ports back as they were, then deletes it. A killed bare process is recorded only as a comment (can't be auto-restarted).
@@ -139,6 +141,7 @@ skipped by `--no-wizard`) offers, in order, to (1) run `update-wp-config.sh`, (2
 imported site's stale creds must be fixed **before** `update-db-domains.sh`'s wp-cli path can
 connect. `update-wp-config.sh` exists precisely because the official image only generates
 `wp-config.php` when it's missing — an imported `./wordpress` keeps the source host's credentials.
+Each wizard step's failure is reported and skipped rather than aborting the rest of `start.sh`.
 
 ## Notes
 
